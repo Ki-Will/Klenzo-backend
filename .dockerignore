@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+Dockerfile
+.dockerignore
+.nx/cache
+.nx/workspace-data
+dist
+tmp
+.git
+.gitignore
+.env

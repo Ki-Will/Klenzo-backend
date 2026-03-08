@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  # --- NATS with JetStream ---
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222" # Client port
+      - "8222:8222" # Management HTTP port
+    command: ["--js", "-m", "8222"]
+
+  # --- Redis ---
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  # --- Databases ---
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: klenzo
+      POSTGRES_PASSWORD: klenzo_password
+      POSTGRES_DB: klenzo_db
+    ports:
+      - "5432:5432"
+
+  # --- Object Storage ---
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: klenzo_admin
+      MINIO_ROOT_PASSWORD: klenzo_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  minio_data:
