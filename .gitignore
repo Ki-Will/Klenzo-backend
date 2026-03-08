@@ -1,12 +1,10 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
 # compiled output
-dist
-tmp
-out-tsc
+/dist
+/tmp
+/out-tsc
 
 # dependencies
-node_modules
+/node_modules
 
 # IDEs and editors
 /.idea
@@ -23,6 +21,7 @@ node_modules
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.history/
 
 # misc
 /.sass-cache
@@ -38,5 +37,13 @@ testem.log
 .DS_Store
 Thumbs.db
 
-.nx/cache
-.nx/workspace-data
+# Nx
+/.nx/cache
+/.nx/workspace-data
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
