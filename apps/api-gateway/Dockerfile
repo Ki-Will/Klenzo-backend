@@ -18,10 +18,10 @@ COPY apps/api-gateway ./apps/api-gateway
 RUN npx nx build messaging
 
 # Build the service
-RUN npx nx build apigateway
+RUN npx nx build api-gateway
 
 # Expose port
 EXPOSE 3000
 
 # Run the service
-CMD ["npx", "nx", "serve", "apigateway"]
+CMD ["npx", "nx", "serve", "api-gateway"]
