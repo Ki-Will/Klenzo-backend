@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
-import { EventBusService } from '@klenzo-backend/messaging';
+import { EventBusService } from '@klenzo/messaging';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 
