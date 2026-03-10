@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { MessagingModule } from '@klenzo-backend/messaging';
+import { MessagingModule } from '@klenzo/messaging';
 import { User } from './entities/user.entity';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
