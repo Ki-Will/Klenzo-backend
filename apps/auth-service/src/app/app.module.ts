@@ -19,7 +19,7 @@ import { AuthService } from './auth/auth.service';
       synchronize: true,
     }),
     TypeOrmModule.forFeature([User]),
-    MessagingModule.forRoot({ servers: ['nats://localhost:4222'] }),
+    MessagingModule.forRoot({ servers: [process.env.NATS_SERVERS || 'nats://localhost:4222'] }),
   ],
   controllers: [AuthController],
   providers: [AuthService],
