@@ -1,21 +1,27 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { MessagingModule } from '@klenzo/messaging';
-import { AuthController } from './app.controller';
-import { AuthService } from './auth.service';
-import { PrismaService } from './prisma.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { MessagingModule } from '@klenzo-backend/messaging';
+import { User } from './entities/user.entity';
+import { AuthController } from './auth/auth.controller';
+import { AuthService } from './auth/auth.service';
 
 @Module({
   imports: [
-    MessagingModule.forRoot({
-      servers: process.env.NATS_SERVERS || 'nats://localhost:4222',
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: process.env.DB_HOST || 'localhost',
+      port: 5432,
+      username: 'klenzo',
+      password: 'klenzo_password',
+      database: 'klenzo_db',
+      schema: 'auth',
+      entities: [User],
+      synchronize: true,
     }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super_secret',
-      signOptions: { expiresIn: '1h' },
-    }),
+    TypeOrmModule.forFeature([User]),
+    MessagingModule.forRoot({ servers: ['nats://localhost:4222'] }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PrismaService],
+  providers: [AuthService],
 })
-export class AppModule { }
+export class AppModule {}

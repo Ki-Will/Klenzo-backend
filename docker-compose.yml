@@ -24,6 +24,9 @@ services:
       POSTGRES_DB: klenzo_db
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+    
 
   # --- Object Storage ---
   minio:
@@ -40,3 +43,4 @@ services:
 
 volumes:
   minio_data:
+  postgres_data:
