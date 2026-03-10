@@ -3,6 +3,7 @@ import { connect, NatsConnection } from 'nats';
 import { EventBusService } from './event-bus.service';
 
 export const NATS_CONNECTION = 'NATS_CONNECTION';
+export const MESSAGING_MODULE_OPTIONS = 'MESSAGING_MODULE_OPTIONS';
 
 export interface MessagingModuleOptions {
   servers: string | string[];
@@ -22,7 +23,14 @@ export class MessagingModule {
 
     return {
       module: MessagingModule,
-      providers: [natsProvider, EventBusService],
+      providers: [
+        {
+          provide: MESSAGING_MODULE_OPTIONS,
+          useValue: options,
+        },
+        natsProvider,
+        EventBusService,
+      ],
       exports: [EventBusService, NATS_CONNECTION],
     };
   }
