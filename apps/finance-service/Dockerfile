@@ -1,5 +1,5 @@
 # Dockerfile for finance-service
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
