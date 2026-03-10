@@ -14,11 +14,10 @@ export class MessagingModule {
   static forRoot(options: MessagingModuleOptions): DynamicModule {
     const natsProvider = {
       provide: NATS_CONNECTION,
-      useFactory: async (): Promise<NatsConnection> => {
-        const nc = await connect({ servers: options.servers, maxReconnectAttempts: -1 });
-        console.log(`Connected to NATS at ${Array.isArray(options.servers) ? options.servers.join(',') : options.servers}`);
-        return nc;
+      useFactory: (options: MessagingModuleOptions) => {
+        return connect({ servers: options.servers, maxReconnectAttempts: -1 });
       },
+      inject: [MESSAGING_MODULE_OPTIONS],
     };
 
     return {
