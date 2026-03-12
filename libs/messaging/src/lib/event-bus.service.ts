@@ -6,7 +6,9 @@ import { NATS_CONNECTION } from './messaging.module';
 export class EventBusService implements OnModuleDestroy {
     private nc: NatsConnection | null = null;
 
-    constructor(@Inject(NATS_CONNECTION) private readonly ncPromise: Promise<NatsConnection>) {}
+    constructor(
+        @Inject(NATS_CONNECTION) private readonly ncPromise: Promise<NatsConnection>
+    ) {}
 
     private async getNc(): Promise<NatsConnection> {
         if (!this.nc) {
