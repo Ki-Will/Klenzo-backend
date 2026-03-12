@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json nx.json tsconfig*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm i
 
 # Copy source code
 COPY libs ./libs
