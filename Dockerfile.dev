@@ -1,0 +1,17 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm config set fetch-retry-maxtimeout 600000 && \
+    npm config set fetch-retries 5 && \
+    npm ci
+
+# Copy Nx configuration files
+COPY nx.json tsconfig*.json ./
+
+# The rest of the source code and libs will be mounted as volumes in docker-compose.yml
+# This ensures that node_modules stays inside the container and is not overwritten by the host.
+
+CMD npx nx serve ${APP_NAME} --watch
