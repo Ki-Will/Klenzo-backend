@@ -9,13 +9,12 @@ export interface MessagingModuleOptions {
   servers: string | string[];
 }
 
-@Global()
 @Module({})
 export class MessagingModule {
   static forRoot(options: MessagingModuleOptions): DynamicModule {
     const natsProvider = {
       provide: NATS_CONNECTION,
-      useFactory: (options: MessagingModuleOptions) => {
+      useFactory: async (options: MessagingModuleOptions) => {
         return connect({ servers: options.servers, maxReconnectAttempts: -1 });
       },
       inject: [MESSAGING_MODULE_OPTIONS],
@@ -29,9 +28,23 @@ export class MessagingModule {
           useValue: options,
         },
         natsProvider,
-        EventBusService,
+        {
+          provide: EventBusService,
+          useFactory: (ncPromise: Promise<NatsConnection>) => {
+            return new EventBusService(ncPromise);
+          },
+          inject: [NATS_CONNECTION],
+        },
       ],
       exports: [EventBusService, NATS_CONNECTION],
+    };
+  }
+
+  static forFeature(): DynamicModule {
+    return {
+      module: MessagingModule,
+      providers: [EventBusService],
+      exports: [EventBusService],
     };
   }
 }
