@@ -7,12 +7,16 @@ services:
       - "4222:4222" # Client port
       - "8222:8222" # Management HTTP port
     command: ["--js", "-m", "8222"]
+    networks:
+      - klenzo_network
 
   # --- Redis ---
   redis:
     image: redis:alpine
     ports:
       - "6379:6379"
+    networks:
+      - klenzo_network
 
   # --- Databases ---
   postgres:
@@ -24,7 +28,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data:ro
+      - postgres_data:/var/lib/postgresql/data_klenzo
+      - ./migrations/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
+    networks:
+      - klenzo_network
     
 
   # --- Object Storage ---
@@ -39,17 +46,23 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    networks:
+      - klenzo_network
 
-# --- Application Services ---
+  # --- Application Services ---
   api-gateway:
     build:
       context: .
-      dockerfile: apps/api-gateway/Dockerfile
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
     ports:
       - "3000:3000"
     depends_on:
       - nats
     environment:
+      - APP_NAME=api-gateway
       - NODE_ENV=development
       - NATS_SERVERS=nats://nats:4222
       - JWT_SECRET=secret_key
@@ -59,13 +72,17 @@ services:
   auth-service:
     build:
       context: .
-      dockerfile: apps/auth-service/Dockerfile
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
     ports:
       - "3001:3001"
     depends_on:
       - postgres
       - nats
     environment:
+      - APP_NAME=auth-service
       - NODE_ENV=development
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -80,13 +97,17 @@ services:
   finance-service:
     build:
       context: .
-      dockerfile: apps/finance-service/Dockerfile
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
     ports:
       - "3002:3002"
     depends_on:
       - postgres
       - nats
     environment:
+      - APP_NAME=finance-service
       - NODE_ENV=development
       - DB_HOST=postgres
       - DB_PORT=5432
