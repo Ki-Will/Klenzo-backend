@@ -32,7 +32,6 @@ services:
       - ./migrations/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
     networks:
       - klenzo_network
-    
 
   # --- Object Storage ---
   minio:
@@ -48,6 +47,18 @@ services:
       - minio_data:/data
     networks:
       - klenzo_network
+
+
+  # --- Mailpit (Development Only) ---
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI
+    networks:
+      - klenzo_network
+    profiles:
+      - development
 
   # --- Application Services ---
   api-gateway:
@@ -66,6 +77,8 @@ services:
       - NODE_ENV=development
       - NATS_SERVERS=nats://nats:4222
       - JWT_SECRET=secret_key
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
     networks:
       - klenzo_network
 
@@ -91,6 +104,8 @@ services:
       - DB_NAME=klenzo_db
       - NATS_SERVERS=nats://nats:4222
       - JWT_SECRET=secret_key
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
     networks:
       - klenzo_network
 
@@ -116,6 +131,8 @@ services:
       - DB_NAME=klenzo_db
       - NATS_SERVERS=nats://nats:4222
       - JWT_SECRET=secret_key
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
     networks:
       - klenzo_network
 
