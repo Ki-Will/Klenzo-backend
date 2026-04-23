@@ -1,4 +1,5 @@
 import { Controller, Post, Body, UsePipes, ValidationPipe } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
 import { RegisterUserDto } from '../dto/register-user.dto';
 import { LoginUserDto } from '../dto/login-user.dto';
@@ -7,6 +8,11 @@ import { ResetPasswordDto } from '../dto/reset-password.dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @MessagePattern('auth.profile.update')
+  async updateProfile(@Payload() data: { userId: number; dto: any }) {
+    return this.authService.updateProfile(data.userId, data.dto);
+  }
 
   @Post('register')
   @UsePipes(new ValidationPipe())
