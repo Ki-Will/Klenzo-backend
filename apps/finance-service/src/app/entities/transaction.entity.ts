@@ -1,4 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne } from 'typeorm';
+import { Group } from './group.entity';
 
 @Entity({ schema: 'finance', name: 'transactions' })
 export class Transaction {
@@ -7,6 +8,12 @@ export class Transaction {
 
   @Column()
   userId: number;
+
+  @Column({ nullable: true })
+  groupId: number;
+
+  @ManyToOne(() => Group, (group) => group.transactions)
+  group: Group;
 
   @Column({ nullable: true })
   accountId: number;

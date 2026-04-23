@@ -18,6 +18,34 @@ import { JwtAuthGuard } from './jwt-auth.guard';
           servers: [process.env.NATS_SERVERS || 'nats://localhost:4222'],
         },
       },
+      {
+        name: 'PRODUCTIVITY_SERVICE',
+        transport: Transport.NATS,
+        options: {
+          servers: [process.env.NATS_SERVERS || 'nats://localhost:4222'],
+        },
+      },
+      {
+        name: 'HABIT_SERVICE',
+        transport: Transport.NATS,
+        options: {
+          servers: [process.env.NATS_SERVERS || 'nats://localhost:4222'],
+        },
+      },
+      {
+        name: 'FINANCE_SERVICE',
+        transport: Transport.NATS,
+        options: {
+          servers: [process.env.NATS_SERVERS || 'nats://localhost:4222'],
+        },
+      },
+      {
+        name: 'NOTIFICATION_SERVICE',
+        transport: Transport.NATS,
+        options: {
+          servers: [process.env.NATS_SERVERS || 'nats://localhost:4222'],
+        },
+      },
     ]),
   ],
   controllers: [AppController],

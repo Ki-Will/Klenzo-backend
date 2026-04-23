@@ -116,6 +116,12 @@ export class AuthService {
     return user;
   }
 
+  async updateProfile(userId: number, dto: any): Promise<User> {
+    const user = await this.validateUserById(userId);
+    Object.assign(user, dto);
+    return this.userRepository.save(user);
+  }
+
   private async generateRefreshToken(userId: number): Promise<string> {
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');

@@ -1,96 +1,137 @@
-# Klenzo
+# Klenzo Backend - Nx Monorepo
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+Klenzo is a modular personal productivity and financial management platform built with NestJS, TypeORM, and NATS.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+## 🏗 Architecture Overview
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+The project follows a microservices architecture managed by Nx:
 
-## Run tasks
+- **API Gateway**: The entry point for all client requests. Handles routing to microservices via NATS.
+- **Auth Service**: Manages user registration, authentication, and security.
+- **Finance Service**: Handles financial tracking, transactions, and budgeting.
+- **Messaging Library**: Shared library for NATS-based event-driven communication.
 
-To run tasks with Nx use:
+## 🚀 Getting Started
 
-```sh
-npx nx <target> <project-name>
-```
+### Prerequisites
 
-For example:
+- Node.js 20+
+- Docker & Docker Compose
+- NPM
 
-```sh
-npx nx build myproject
-```
+### Development Setup
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+Klenzo uses a standardized Docker development environment with hot-reloading:
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+1. **Install Dependencies Locally**:
+   ```bash
+   npm install
+   ```
 
-## Add new projects
+2. **Start the Environment**:
+   ```bash
+   docker-compose --profile development up --build
+   ```
+   *Note: The `--profile development` flag includes **Mailpit** for email testing.*
 
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
+### Key Features
+- **Nx Watch Mode**: Containers automatically rebuild and restart when you edit code.
+- **Dependency Protection**: Internal `node_modules` are preserved within containers.
+- **Database Initialization**: Automated creation of `auth` and `finance` schemas.
 
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
-```
+---
 
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+## 📡 API Documentation
 
-```sh
-# Generate an app
-npx nx g @nx/react:app demo
+### Base URL
+`http://localhost:3000/api`
 
-# Generate a library
-npx nx g @nx/react:lib some-lib
-```
+### 1. Auth Service
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+#### **Register User**
+`POST /auth/register`
+- **Body**:
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+  ```
+- **Constraints**: Password min 8 chars.
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+#### **Login**
+`POST /auth/login`
+- **Body**:
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+  ```
+- **Response**: `{ "accessToken": "...", "refreshToken": "..." }`
 
-## Set up CI!
+#### **Refresh Token**
+`POST /auth/refresh`
+- **Body**: `{ "refreshToken": "..." }`
 
-### Step 1
+#### **Forgot Password**
+`POST /auth/forgot-password`
+- **Body**: `{ "email": "user@example.com" }`
 
-To connect to Nx Cloud, run the following command:
+#### **Reset Password**
+`POST /auth/reset-password`
+- **Body**:
+  ```json
+  {
+    "token": "reset_token_from_email",
+    "password": "new_password123"
+  }
+  ```
 
-```sh
-npx nx connect
-```
+#### **Get Profile** (Authenticated)
+`GET /auth/profile`
+- **Header**: `Authorization: Bearer <token>`
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+---
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+### 2. Finance Service
 
-### Step 2
+#### **Create Transaction**
+`POST /finance/transactions`
+- **Body**:
+  ```json
+  {
+    "userId": 1,
+    "amount": 100.50,
+    "description": "Grocery",
+    "category": "Food",
+    "transactionType": "expense",
+    "date": "2024-03-12T10:00:00Z"
+  }
+  ```
 
-Use the following command to configure a CI workflow for your workspace:
+#### **Get Transactions**
+`GET /finance/transactions/:userId`
 
-```sh
-npx nx g ci-workflow
-```
+---
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## 🛠 Infrastructure
 
-## Install Nx Console
+| Service | Port | Description |
+|---------|------|-------------|
+| **API Gateway** | 3000 | Main Entry Point |
+| **NATS** | 4222 | Message Broker |
+| **PostgreSQL** | 5432 | Primary Database |
+| **Redis** | 6379 | Caching |
+| **MinIO** | 9000/9001 | Object Storage |
+| **Mailpit** | 8025 | Web Email UI (Dev Only) |
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+## 📦 Database Schemas
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+The system uses separate schemas within the same PostgreSQL database:
+- `auth`: Users, sessions, security tokens.
+- `finance`: Accounts, transactions, budgets.
+- `habit`, `insight`, `notifications`, `productivity`: (Initial schemas created).
 
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## 📄 License
+MIT
