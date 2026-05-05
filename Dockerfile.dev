@@ -1,17 +1,31 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Klenzo — Development image
+#
+# HOW HOT-RELOAD WORKS:
+#   1. docker-compose mounts the entire workspace into /app at runtime.
+#   2. node_modules is kept in a named Docker volume so the host never
+#      overwrites the container's installed packages.
+#   3. `nx serve klenzo` runs webpack in watch mode (poll: 1000ms).
+#      Webpack detects file changes → rebuilds → @nx/js:node restarts the
+#      Node process automatically. No manual restart needed.
+# ─────────────────────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies as a separate layer so they are cached between builds.
+# The actual source is NOT copied here — it comes in via the volume mount.
 COPY package*.json ./
 RUN npm config set fetch-retry-maxtimeout 600000 && \
     npm config set fetch-retries 5 && \
     npm ci
 
-# Copy Nx configuration files
+# Copy only the config files needed to resolve the Nx workspace.
+# These rarely change, so they stay cached too.
 COPY nx.json tsconfig*.json ./
 
-# The rest of the source code and libs will be mounted as volumes in docker-compose.yml
-# This ensures that node_modules stays inside the container and is not overwritten by the host.
+EXPOSE 3000
 
-CMD npx nx serve ${APP_NAME} --watch
+# watch=true is set in webpack.config.js when NODE_ENV=development.
+# @nx/js:node will restart the process every time webpack emits a new build.
+CMD ["npx", "nx", "serve", "klenzo", "--configuration=development"]
