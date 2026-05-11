@@ -1,26 +1,10 @@
-
 services:
-  # --- NATS with JetStream ---
-  nats:
-    image: nats:latest
-    ports:
-      - "4222:4222" # Client port
-      - "8222:8222" # Management HTTP port
-    command: ["--js", "-m", "8222"]
-    networks:
-      - klenzo_network
 
-  # --- Redis ---
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - klenzo_network
+  # ── Infrastructure ──────────────────────────────────────────────────────────
 
-  # --- Databases ---
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: klenzo
       POSTGRES_PASSWORD: klenzo_password
@@ -28,117 +12,118 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data_klenzo
-      - ./migrations/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
+      - ./migrations/create-tables.sql:/docker-entrypoint-initdb.d/02-create-tables.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U klenzo -d klenzo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - klenzo_network
 
-  # --- Object Storage ---
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - klenzo_network
+
   minio:
     image: quay.io/minio/minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: klenzo_admin
       MINIO_ROOT_PASSWORD: klenzo_password
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console → http://localhost:9001
     volumes:
       - minio_data:/data
     networks:
       - klenzo_network
 
-
-  # --- Mailpit (Development Only) ---
+  # Development-only email catcher — http://localhost:8025
   mailpit:
     image: axllent/mailpit:latest
+    restart: unless-stopped
     ports:
-      - "1025:1025" # SMTP port
-      - "8025:8025" # Web UI
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
     networks:
       - klenzo_network
     profiles:
       - development
 
-  # --- Application Services ---
-  api-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - .:/app
-      - /app/node_modules
-    ports:
-      - "3000:3000"
-    depends_on:
-      - nats
-    environment:
-      - APP_NAME=api-gateway
-      - NODE_ENV=development
-      - NATS_SERVERS=nats://nats:4222
-      - JWT_SECRET=secret_key
-      - SMTP_HOST=mailpit
-      - SMTP_PORT=1025
-    networks:
-      - klenzo_network
+  # ── Application ─────────────────────────────────────────────────────────────
+  #
+  # Uses Dockerfile.dev (not the production image).
+  #
+  # Volume strategy:
+  #   - `.:/app`              → mounts your entire workspace so every file save
+  #                             is immediately visible inside the container.
+  #   - `node_modules_vol`    → named volume that sits at /app/node_modules.
+  #                             Docker resolves this AFTER the bind mount, so the
+  #                             container's installed packages are never replaced
+  #                             by whatever is (or isn't) on your host.
+  #
+  # Hot-reload chain:
+  #   file saved on host
+  #     → bind mount makes it visible in container
+  #       → webpack poll detects change (poll: 1000ms)
+  #         → webpack rebuilds dist/apps/klenzo/main.js
+  #           → @nx/js:node restarts the Node process
+  #             → app is live again (usually < 5 seconds)
 
-  auth-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - .:/app
-      - /app/node_modules
-    ports:
-      - "3001:3001"
-    depends_on:
-      - postgres
-      - nats
-    environment:
-      - APP_NAME=auth-service
-      - NODE_ENV=development
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=klenzo
-      - DB_PASSWORD=klenzo_password
-      - DB_NAME=klenzo_db
-      - NATS_SERVERS=nats://nats:4222
-      - JWT_SECRET=secret_key
-      - SMTP_HOST=mailpit
-      - SMTP_PORT=1025
-    networks:
-      - klenzo_network
-
-  finance-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - .:/app
-      - /app/node_modules
-    ports:
-      - "3002:3002"
-    depends_on:
-      - postgres
-      - nats
-    environment:
-      - APP_NAME=finance-service
-      - NODE_ENV=development
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=klenzo
-      - DB_PASSWORD=klenzo_password
-      - DB_NAME=klenzo_db
-      - NATS_SERVERS=nats://nats:4222
-      - JWT_SECRET=secret_key
-      - SMTP_HOST=mailpit
-      - SMTP_PORT=1025
-    networks:
-      - klenzo_network
+  # klenzo:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   restart: unless-stopped
+  #   volumes:
+  #     - .:/app                        # live source mount
+  #     - node_modules_vol:/app/node_modules   # isolated node_modules
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=3000
+  #     # Database
+  #     - DB_HOST=postgres
+  #     - DB_PORT=5432
+  #     - DB_USER=klenzo
+  #     - DB_PASSWORD=klenzo_password
+  #     - DB_NAME=klenzo_db
+  #     # Auth
+  #     - JWT_SECRET=secret_key
+  #     # Email
+  #     - SMTP_HOST=mailpit
+  #     - SMTP_PORT=1025
+  #     # Redis
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     # CORS
+  #     - CORS_ORIGIN=*
+  #   networks:
+  #     - klenzo_network
 
 volumes:
-  minio_data:
   postgres_data:
+  minio_data:
+  node_modules_vol:   # keeps container node_modules separate from host
 
 networks:
   klenzo_network:
