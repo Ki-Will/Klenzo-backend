@@ -39,13 +39,7 @@
         "targetName": "test"
       },
       "exclude": [
-        "apps/api-gateway-e2e/**/*",
-        "apps/auth-service-e2e/**/*",
-        "apps/finance-service-e2e/**/*",
-        "apps/productivity-service-e2e/**/*",
-        "apps/habit-service-e2e/**/*",
-        "apps/insight-service-e2e/**/*",
-        "apps/notification-service-e2e/**/*"
+        "apps/klenzo-e2e/**/*"
       ]
     }
   ],
