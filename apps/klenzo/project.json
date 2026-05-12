@@ -1,0 +1,59 @@
+{
+  "name": "klenzo",
+  "sourceRoot": "apps/klenzo/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "main": "apps/klenzo/src/main.ts",
+        "tsConfig": "apps/klenzo/tsconfig.app.json",
+        "assets": ["apps/klenzo/src/assets"],
+        "optimization": false,
+        "outputHashing": "none",
+        "generatePackageJson": true,
+        "sourceMap": true,
+        "outputPath": "dist/apps/klenzo",
+        "webpackConfig": "apps/klenzo/webpack.config.js"
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true,
+          "poll": 1000
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "options": {
+        "buildTarget": "klenzo:build:development",
+        "watch": true,
+        "debounce": 500,
+        "inspect": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "klenzo:build:development"
+        },
+        "production": {
+          "buildTarget": "klenzo:build:production",
+          "watch": false
+        }
+      }
+    },
+    "test": {
+      "options": {
+        "passWithNoTests": true
+      }
+    }
+  }
+}
