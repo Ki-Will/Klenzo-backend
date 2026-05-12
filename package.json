@@ -2,7 +2,16 @@
   "name": "@klenzo/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "dev": "nx serve klenzo",
+    "build": "nx build klenzo",
+    "start": "node dist/apps/klenzo/main.js",
+    "start:dev": "nx serve klenzo",
+    "lint": "nx lint klenzo",
+    "test": "nx test klenzo",
+    "typecheck": "tsc -p apps/klenzo/tsconfig.app.json --noEmit",
+    "seed": "dotenv -e .env -- ts-node --project apps/klenzo/tsconfig.app.json --require reflect-metadata apps/klenzo/src/seed.ts"
+  },
   "private": true,
   "devDependencies": {
     "@eslint/js": "^9.8.0",
@@ -22,6 +31,7 @@
     "@swc/helpers": "~0.5.18",
     "@types/bcrypt": "^6.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^20.19.9",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.8.0",
@@ -40,15 +50,21 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
     "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/microservices": "^11.1.16",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-socket.io": "^11.1.19",
+    "@nestjs/serve-static": "^5.0.5",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
+    "@nestjs/websockets": "^11.1.19",
     "@prisma/client": "^7.4.2",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express-rate-limit": "^5.1.3",
     "@types/nodemailer": "^8.0.0",
     "@types/passport-jwt": "^4.0.1",
@@ -56,8 +72,10 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cookie-parser": "^1.4.7",
     "express-rate-limit": "^8.3.1",
     "ioredis": "^5.10.0",
+    "multer": "^1.4.5-lts.1",
     "nats": "^2.29.3",
     "nodemailer": "^8.0.5",
     "passport": "^0.7.0",
@@ -65,6 +83,7 @@
     "pg": "^8.20.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",
+    "socket.io": "^4.8.3",
     "typeorm": "^0.3.28"
   }
 }
