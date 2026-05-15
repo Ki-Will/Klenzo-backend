@@ -9,6 +9,7 @@ import {
 } from '../entities/notification.entity';
 import { NotificationGateway } from './notification.gateway';
 import { RedisService } from '../redis/redis.service';
+import { User } from '../entities/user.entity';
 
 // ── Banner response shape ─────────────────────────────────────────────────────
 export interface BannerResponse {
@@ -37,6 +38,8 @@ export class NotificationService {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly notificationGateway: NotificationGateway,
     private readonly redis: RedisService,
   ) {
@@ -202,6 +205,20 @@ export class NotificationService {
       startDate:  params.startDate ? new Date(params.startDate) : null,
       endDate:    params.endDate   ? new Date(params.endDate)   : null,
     });
+
+    // ── Check user preferences ───────────────────────────────────────────
+    if (params.userId && !isBanner) {
+      const user = await this.userRepository.findOne({ where: { id: params.userId } });
+      if (user?.notificationSettings) {
+        const settings = user.notificationSettings;
+        const cat = params.category;
+        
+        if (cat === NotificationCategory.INSIGHT && settings.smartInsights === false) return null as any;
+        if (cat === NotificationCategory.TRANSACTION && settings.transactionAlerts === false) return null as any;
+        if (cat === NotificationCategory.SECURITY && settings.securityAlerts === false) return null as any;
+        if (cat === NotificationCategory.GROUP && settings.groupAlerts === false) return null as any;
+      }
+    }
 
     const saved = await this.notificationRepository.save(notif);
 

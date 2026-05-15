@@ -6,9 +6,11 @@ import { NotificationController, BannerController } from './notification.control
 import { NotificationService } from './notification.service';
 import { NotificationGateway } from './notification.gateway';
 
+import { User } from '../entities/user.entity';
+
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification]),
+    TypeOrmModule.forFeature([Notification, User]),
     // JwtModule needed by NotificationGateway to verify WS tokens
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'KlenzoSecret',

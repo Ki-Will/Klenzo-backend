@@ -15,6 +15,10 @@ export enum NotificationType {
 export enum NotificationCategory {
   NOTIFICATION = 'notification',
   BANNER = 'banner',
+  INSIGHT = 'insight',
+  TRANSACTION = 'transaction',
+  SECURITY = 'security',
+  GROUP = 'group',
 }
 
 /**
