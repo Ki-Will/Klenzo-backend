@@ -61,6 +61,58 @@ export class CreateTransactionDto {
   @IsOptional()
   @Type(() => Number)
   parentTransactionId?: number;
+
+  @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  budgetId?: number;
+}
+
+export class UpdateTransactionDto {
+  @IsNumber()
+  @IsPositive()
+  @IsOptional()
+  @Type(() => Number)
+  amount?: number;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsIn([TransactionType.INCOME, TransactionType.EXPENSE])
+  @IsOptional()
+  transactionType?: TransactionType;
+
+  @IsDateString()
+  @IsOptional()
+  date?: string;
+
+  @IsString()
+  @IsOptional()
+  groupId?: string;
+
+  @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  accountId?: number;
+
+  @IsIn(['pending', 'approved'])
+  @IsOptional()
+  status?: 'pending' | 'approved';
+
+  @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  parentTransactionId?: number;
+
+  @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  budgetId?: number;
 }
 
 export class CreateGroupDto {
@@ -81,28 +133,72 @@ export class CreateGroupDto {
 export class CreateBudgetDto {
   @IsString()
   @IsNotEmpty()
-  category: string;
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
 
   @IsNumber()
   @IsPositive()
   @Type(() => Number)
   limitAmount: number;
 
-  @IsIn(['monthly', 'weekly', 'yearly'])
+  @IsIn(['monthly', 'quarterly', 'yearly', 'custom'])
   @IsOptional()
   period?: string;
+
+  @IsString()
+  @IsOptional()
+  color?: string;
+
+  @IsString()
+  @IsOptional()
+  icon?: string;
+
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
+
+  @IsDateString()
+  @IsOptional()
+  endDate?: string;
 }
 
 export class UpdateBudgetDto {
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
   @IsNumber()
   @IsPositive()
   @IsOptional()
   @Type(() => Number)
   limitAmount?: number;
 
-  @IsIn(['monthly', 'weekly', 'yearly'])
+  @IsIn(['monthly', 'quarterly', 'yearly', 'custom'])
   @IsOptional()
   period?: string;
+
+  @IsString()
+  @IsOptional()
+  color?: string;
+
+  @IsString()
+  @IsOptional()
+  icon?: string;
+
+  @IsDateString()
+  @IsOptional()
+  startDate?: string;
+
+  @IsDateString()
+  @IsOptional()
+  endDate?: string;
 }
 
 export class AnalyticsQueryDto {
