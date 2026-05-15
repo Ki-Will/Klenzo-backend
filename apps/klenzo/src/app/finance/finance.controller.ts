@@ -22,6 +22,7 @@ import {
   CreateGroupDto,
   CreateBudgetDto,
   UpdateBudgetDto,
+  UpdateTransactionDto,
   AnalyticsQueryDto,
 } from '../dto/finance.dto';
 
@@ -53,6 +54,16 @@ export class FinanceController {
   @HttpCode(HttpStatus.OK)
   deleteTransaction(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
     return this.financeService.deleteTransaction(user.id, id);
+  }
+
+  @Patch('transactions/:id')
+  @HttpCode(HttpStatus.OK)
+  updateTransaction(
+    @CurrentUser() user: User,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateTransactionDto,
+  ) {
+    return this.financeService.updateTransaction(user.id, id, dto);
   }
 
   /**
@@ -111,6 +122,16 @@ export class FinanceController {
     @Param('memberId', ParseIntPipe) memberId: number,
   ) {
     return this.financeService.removeGroupMember(user.id, id, memberId);
+  }
+
+  @Patch('groups/:id')
+  @HttpCode(HttpStatus.OK)
+  updateGroup(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('name') name: string,
+  ) {
+    return this.financeService.updateGroup(user.id, id, name);
   }
 
   @Delete('groups/:id')

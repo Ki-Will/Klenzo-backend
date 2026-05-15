@@ -5,20 +5,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { Repository, Between, MoreThanOrEqual, LessThanOrEqual, IsNull } from 'typeorm';
 import { Transaction, TransactionStatus, TransactionType } from '../entities/transaction.entity';
 import { Group, GroupMember } from '../entities/group.entity';
 import { Budget } from '../entities/budget.entity';
 import { Account } from '../entities/account.entity';
 import { User } from '../entities/user.entity';
 import { NotificationService } from '../notification/notification.service';
-import { NotificationType } from '../entities/notification.entity';
+import { NotificationType, NotificationCategory } from '../entities/notification.entity';
 import { InsightService } from '../insight/insight.service';
 import {
   CreateTransactionDto,
   CreateGroupDto,
   CreateBudgetDto,
   UpdateBudgetDto,
+  UpdateTransactionDto,
   AnalyticsQueryDto,
 } from '../dto/finance.dto';
 
@@ -58,13 +59,15 @@ export class FinanceService {
     });
     const saved = await this.transactionRepo.save(transaction);
 
-    // Only update budget for approved personal expenses
-    if (
-      saved.status === TransactionStatus.APPROVED &&
-      dto.transactionType === TransactionType.EXPENSE &&
-      dto.category
-    ) {
-      const budget = await this.budgetRepo.findOne({ where: { userId, category: dto.category } });
+    // Update budget
+    if (saved.status === TransactionStatus.APPROVED && dto.transactionType === TransactionType.EXPENSE) {
+      let budget: Budget | null = null;
+      if (dto.budgetId) {
+        budget = await this.budgetRepo.findOne({ where: { id: dto.budgetId, userId } });
+      } else if (dto.category) {
+        budget = await this.budgetRepo.findOne({ where: { userId, category: dto.category } });
+      }
+
       if (budget) {
         budget.spent = Number(budget.spent) + Number(dto.amount);
         await this.budgetRepo.save(budget);
@@ -73,8 +76,9 @@ export class FinanceService {
           this.notificationService.createNotification({
             userId,
             title: '⚠️ Budget Exceeded',
-            message: `You exceeded your ${budget.category} budget of ${budget.limitAmount}. Spent: ${budget.spent}.`,
+            message: `You exceeded your "${budget.name}" budget of ${budget.limitAmount}. Spent: ${budget.spent}.`,
             type: NotificationType.WARNING,
+            category: NotificationCategory.TRANSACTION,
           }).catch(() => null);
         }
       }
@@ -84,10 +88,6 @@ export class FinanceService {
     return saved;
   }
 
-  /**
-   * Returns only APPROVED transactions for the user's personal view.
-   * Pending splits are excluded until the user approves them.
-   */
   async getTransactions(userId: number): Promise<Transaction[]> {
     return this.transactionRepo.find({
       where: { userId, status: TransactionStatus.APPROVED },
@@ -106,16 +106,70 @@ export class FinanceService {
     const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
     if (tx.userId !== userId) throw new ForbiddenException();
-    await this.transactionRepo.remove(tx);
+
+    // If it was linked to a budget, decrease spent
+    if (tx.budgetId && tx.status === TransactionStatus.APPROVED && tx.transactionType === TransactionType.EXPENSE) {
+      const budget = await this.budgetRepo.findOne({ where: { id: tx.budgetId } });
+      if (budget) {
+        budget.spent = Math.max(0, Number(budget.spent) - Number(tx.amount));
+        await this.budgetRepo.save(budget);
+      }
+    }
+
+    await this.transactionRepo.delete(transactionId);
     this.insightService.invalidateDashboard(userId).catch(() => null);
     return { message: 'Transaction deleted' };
   }
 
-  /**
-   * Approve a pending split transaction.
-   * Only the transaction's owner can approve it.
-   * Once approved it counts in personal expenses and balance calculations.
-   */
+  async updateTransaction(userId: number, transactionId: number, dto: UpdateTransactionDto): Promise<Transaction> {
+    const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
+    if (!tx) throw new NotFoundException('Transaction not found');
+    if (tx.userId !== userId) throw new ForbiddenException();
+
+    const oldAmount = Number(tx.amount);
+    const oldBudgetId = tx.budgetId;
+    const wasApprovedExpense = tx.status === TransactionStatus.APPROVED && tx.transactionType === TransactionType.EXPENSE;
+
+    // Update fields
+    if (dto.amount !== undefined) tx.amount = dto.amount;
+    if (dto.description !== undefined) tx.description = dto.description;
+    if (dto.category !== undefined) tx.category = dto.category;
+    if (dto.transactionType !== undefined) tx.transactionType = dto.transactionType;
+    if (dto.date !== undefined) tx.date = new Date(dto.date);
+    if (dto.groupId !== undefined) tx.groupId = dto.groupId;
+    if (dto.accountId !== undefined) tx.accountId = dto.accountId;
+    if (dto.status !== undefined) tx.status = dto.status as TransactionStatus;
+    if (dto.parentTransactionId !== undefined) tx.parentTransactionId = dto.parentTransactionId;
+    if (dto.budgetId !== undefined) tx.budgetId = dto.budgetId;
+
+    const saved = await this.transactionRepo.save(tx);
+    const isApprovedExpense = saved.status === TransactionStatus.APPROVED && saved.transactionType === TransactionType.EXPENSE;
+
+    // Re-calculate budgets
+    if (wasApprovedExpense || isApprovedExpense) {
+      // 1. Remove from old budget if changed
+      if (wasApprovedExpense && oldBudgetId) {
+        const oldBudget = await this.budgetRepo.findOne({ where: { id: oldBudgetId } });
+        if (oldBudget) {
+          oldBudget.spent = Math.max(0, Number(oldBudget.spent) - oldAmount);
+          await this.budgetRepo.save(oldBudget);
+        }
+      }
+
+      // 2. Add to new budget
+      if (isApprovedExpense && saved.budgetId) {
+        const newBudget = await this.budgetRepo.findOne({ where: { id: saved.budgetId } });
+        if (newBudget) {
+          newBudget.spent = Number(newBudget.spent) + Number(saved.amount);
+          await this.budgetRepo.save(newBudget);
+        }
+      }
+    }
+
+    this.insightService.invalidateDashboard(userId).catch(() => null);
+    return saved;
+  }
+
   async approveTransaction(userId: number, transactionId: number): Promise<Transaction> {
     const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
@@ -129,9 +183,13 @@ export class FinanceService {
     tx.status = TransactionStatus.APPROVED;
     const saved = await this.transactionRepo.save(tx);
 
-    // Now that it's approved, update the budget
-    if (tx.transactionType === TransactionType.EXPENSE && tx.category) {
-      const budget = await this.budgetRepo.findOne({ where: { userId, category: tx.category } });
+    if (tx.transactionType === TransactionType.EXPENSE) {
+      let budget: Budget | null = null;
+      if (tx.budgetId) {
+        budget = await this.budgetRepo.findOne({ where: { id: tx.budgetId, userId } });
+      } else if (tx.category) {
+        budget = await this.budgetRepo.findOne({ where: { userId, category: tx.category } });
+      }
       if (budget) {
         budget.spent = Number(budget.spent) + Number(tx.amount);
         await this.budgetRepo.save(budget);
@@ -179,11 +237,25 @@ export class FinanceService {
       title: '👥 Group Created',
       message: `You created the group "${savedGroup.name}".`,
       type: NotificationType.INFO,
+      category: NotificationCategory.GROUP,
     }).catch(() => null);
+
+    // Notify other members
+    for (const member of members) {
+      if (member.userId !== userId) {
+        this.notificationService.createNotification({
+          userId: member.userId,
+          title: '👥 Group Invitation',
+          message: `You have been added to the group "${savedGroup.name}" by ${creator.name || creator.email}.`,
+          type: NotificationType.INFO,
+          category: NotificationCategory.GROUP,
+        }).catch(() => null);
+      }
+    }
 
     return this.groupRepo.findOne({
       where: { id: savedGroup.id },
-      relations: ['members', 'transactions'],
+      relations: ['members'],
     }) as Promise<Group>;
   }
 
@@ -211,21 +283,41 @@ export class FinanceService {
     });
   }
 
+  async updateGroup(userId: number, groupId: string, name: string): Promise<Group> {
+    const group = await this.groupRepo.findOne({
+      where: { id: groupId },
+      relations: ['members'],
+    });
+    if (!group) throw new NotFoundException('Group not found');
+    if (group.createdBy !== userId) throw new ForbiddenException();
+
+    group.name = name;
+    const saved = await this.groupRepo.save(group);
+
+    for (const member of group.members) {
+      if (member.userId) {
+        this.notificationService.createNotification({
+          userId: member.userId,
+          title: '👥 Group Updated',
+          message: `The group "${group.name}" has been renamed.`,
+          type: NotificationType.INFO,
+          category: NotificationCategory.GROUP,
+        }).catch(() => null);
+      }
+    }
+    return saved;
+  }
+
   async getGroupDetail(userId: number, groupId: string): Promise<Group> {
     const group = await this.groupRepo.findOne({
       where: { id: groupId },
       relations: ['members', 'transactions'],
     });
     if (!group) throw new NotFoundException('Group not found');
-    if (group.createdBy !== userId) throw new ForbiddenException();
+    this.assertGroupAccess(group, userId);
     return group;
   }
 
-  /**
-   * GET /finance/groups/:id/transactions
-   * Returns ALL transactions for the group (approved + pending) so the
-   * group detail page can show the full picture including pending approvals.
-   */
   async getGroupTransactions(userId: number, groupId: string): Promise<Transaction[]> {
     const group = await this.groupRepo.findOne({ where: { id: groupId }, relations: ['members'] });
     if (!group) throw new NotFoundException('Group not found');
@@ -244,15 +336,23 @@ export class FinanceService {
 
     const userToAdd = await this.userRepository.findOne({ where: { email } });
     if (!userToAdd) {
-      throw new NotFoundException(`User "${email}" not found. They must register first.`);
+      throw new NotFoundException(`User "${email}" not found.`);
     }
     if (group.members.find((m) => m.userId === userToAdd.id)) {
-      throw new BadRequestException(`"${email}" is already a member of this group.`);
+      throw new BadRequestException(`"${email}" is already in this group.`);
     }
 
     await this.groupMemberRepo.save(
       this.groupMemberRepo.create({ email, userId: userToAdd.id, groupId }),
     );
+
+    this.notificationService.createNotification({
+      userId: userToAdd.id,
+      title: '👥 Added to Group',
+      message: `You have been added to the group "${group.name}".`,
+      type: NotificationType.INFO,
+      category: NotificationCategory.GROUP,
+    }).catch(() => null);
 
     return this.groupRepo.findOne({ where: { id: groupId }, relations: ['members'] }) as Promise<Group>;
   }
@@ -263,12 +363,17 @@ export class FinanceService {
     if (group.createdBy !== userId) throw new ForbiddenException();
 
     const member = await this.groupMemberRepo.findOne({ where: { id: memberId, groupId } });
-    if (!member) throw new NotFoundException('Member not found in this group');
-    if (member.userId === group.createdBy) {
-      throw new BadRequestException('The group creator cannot be removed from the group.');
-    }
+    if (!member) throw new NotFoundException('Member not found');
 
     await this.groupMemberRepo.remove(member);
+    this.notificationService.createNotification({
+      userId: member.userId,
+      title: '👥 Removed from Group',
+      message: `You have been removed from the group "${group.name}".`,
+      type: NotificationType.WARNING,
+      category: NotificationCategory.GROUP,
+    }).catch(() => null);
+
     return { message: 'Member removed' };
   }
 
@@ -280,10 +385,6 @@ export class FinanceService {
     return { message: 'Group deleted' };
   }
 
-  /**
-   * Returns a flat array of balance objects — consistent shape, numeric values.
-   * Only counts APPROVED transactions.
-   */
   async getGroupBalances(userId: number, groupId: string) {
     const group = await this.groupRepo.findOne({
       where: { id: groupId },
@@ -293,7 +394,6 @@ export class FinanceService {
     this.assertGroupAccess(group, userId);
 
     if (group.members.length === 0) return [];
-
     const net: Record<number, { userId: number; name: string; balance: number }> = {};
 
     for (const m of group.members) {
@@ -306,17 +406,12 @@ export class FinanceService {
       if (tx.status !== TransactionStatus.APPROVED) continue;
 
       const share = Number(tx.amount) / group.members.length;
-      if (net[tx.userId] !== undefined) {
-        net[tx.userId].balance += Number(tx.amount) - share;
-      }
+      if (net[tx.userId]) net[tx.userId].balance += Number(tx.amount) - share;
       for (const m of group.members) {
-        if (m.userId !== tx.userId && net[m.userId] !== undefined) {
-          net[m.userId].balance -= share;
-        }
+        if (m.userId !== tx.userId && net[m.userId]) net[m.userId].balance -= share;
       }
     }
 
-    // Return flat array with rounded numeric balances
     return Object.values(net).map((entry) => ({
       userId: entry.userId,
       name: entry.name,
@@ -347,12 +442,16 @@ export class FinanceService {
   // ─── Budgets ──────────────────────────────────────────────────────────────
 
   async createBudget(userId: number, dto: CreateBudgetDto): Promise<Budget> {
-    const saved = await this.budgetRepo.save(this.budgetRepo.create({ ...dto, userId }));
+    const budget = this.budgetRepo.create({ ...dto, userId });
+    if (!budget.period) budget.period = 'monthly';
+    const saved = await this.budgetRepo.save(budget);
+    
     this.notificationService.createNotification({
       userId,
       title: '📊 Budget Created',
-      message: `Budget for "${saved.category}" set at ${saved.limitAmount} (${saved.period}).`,
+      message: `Budget "${saved.name}" set at ${saved.limitAmount} (${saved.period}).`,
       type: NotificationType.INFO,
+      category: NotificationCategory.TRANSACTION,
     }).catch(() => null);
     return saved;
   }
@@ -362,25 +461,51 @@ export class FinanceService {
   }
 
   async updateBudget(userId: number, budgetId: number, dto: UpdateBudgetDto): Promise<Budget> {
-    const budget = await this.budgetRepo.findOne({ where: { id: budgetId } });
+    const budget = await this.budgetRepo.findOne({ where: { id: budgetId, userId } });
     if (!budget) throw new NotFoundException('Budget not found');
-    if (budget.userId !== userId) throw new ForbiddenException();
     Object.assign(budget, dto);
-    return this.budgetRepo.save(budget);
+    const saved = await this.budgetRepo.save(budget);
+    await this.recalculateBudgetSpent(userId, budgetId);
+    return saved;
   }
 
   async deleteBudget(userId: number, budgetId: number): Promise<{ message: string }> {
-    const budget = await this.budgetRepo.findOne({ where: { id: budgetId } });
+    const budget = await this.budgetRepo.findOne({ where: { id: budgetId, userId } });
     if (!budget) throw new NotFoundException('Budget not found');
-    if (budget.userId !== userId) throw new ForbiddenException();
+    
+    // Unlink transactions
+    await this.transactionRepo.update({ budgetId }, { budgetId: null });
+    
     await this.budgetRepo.remove(budget);
-    this.notificationService.createNotification({
-      userId,
-      title: 'Budget Deleted',
-      message: `Your "${budget.category}" budget has been removed.`,
-      type: NotificationType.INFO,
-    }).catch(() => null);
     return { message: 'Budget deleted' };
+  }
+
+  async recalculateBudgetSpent(userId: number, budgetId: number): Promise<void> {
+    const budget = await this.budgetRepo.findOne({ where: { id: budgetId, userId } });
+    if (!budget) return;
+
+    // Sum transactions explicitly linked to this budget
+    const linkedTx = await this.transactionRepo.find({ 
+      where: { budgetId, userId, status: TransactionStatus.APPROVED, transactionType: TransactionType.EXPENSE } 
+    });
+    let total = linkedTx.reduce((s, t) => s + Number(t.amount), 0);
+
+    // If budget has a category, also include transactions with that category that AREN'T linked to another budget
+    if (budget.category) {
+      const catTx = await this.transactionRepo.find({
+        where: { 
+          category: budget.category, 
+          userId, 
+          status: TransactionStatus.APPROVED, 
+          transactionType: TransactionType.EXPENSE,
+          budgetId: IsNull() // Only if not already linked manually to another budget
+        }
+      });
+      total += catTx.reduce((s, t) => s + Number(t.amount), 0);
+    }
+
+    budget.spent = Math.round(total * 100) / 100;
+    await this.budgetRepo.save(budget);
   }
 
   // ─── Analytics ────────────────────────────────────────────────────────────
@@ -415,9 +540,7 @@ export class FinanceService {
       .filter((t) => new Date(t.date) >= startLastMonth && new Date(t.date) < startThisMonth)
       .reduce((a, t) => a + Number(t.amount), 0);
 
-    const change = lastMonth > 0
-      ? Math.round(((thisMonth - lastMonth) / lastMonth) * 1000) / 10
-      : 0;
+    const change = lastMonth > 0 ? Math.round(((thisMonth - lastMonth) / lastMonth) * 1000) / 10 : 0;
 
     return {
       totalSpend: Math.round(totalExpenses * 100) / 100,
@@ -459,15 +582,13 @@ export class FinanceService {
       .sort((a, b) => b.amount - a.amount);
   }
 
-  // ─── Accounts ─────────────────────────────────────────────────────────────
-
   async getAccounts(userId: number): Promise<Account[]> {
     return this.accountRepo.find({ where: { userId } });
   }
 
   private assertGroupAccess(group: Group, userId: number): void {
     const isCreator = group.createdBy === userId;
-    const isMember = group.members?.some((member) => member.userId === userId);
+    const isMember = group.members?.some((member: GroupMember) => member.userId === userId);
     if (!isCreator && !isMember) throw new ForbiddenException();
   }
 }

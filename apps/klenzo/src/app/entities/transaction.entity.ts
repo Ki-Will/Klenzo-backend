@@ -94,6 +94,9 @@ export class Transaction {
   })
   category: string | null;
 
+  @Column({ nullable: true, type: 'int' })
+  budgetId: number | null;
+
   @Column({
     type: 'timestamptz',
   })
