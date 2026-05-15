@@ -18,9 +18,9 @@ export class R2Service implements OnModuleInit {
 
   constructor() {
     this.bucketName = process.env.R2_BUCKET_NAME || 'klenzo-storage';
-    // Ensure no trailing slash
+    // Use relative path by default to work with Next.js proxy
     const baseUrl =
-      process.env.R2_PUBLIC_URL || 'http://localhost:9000/klenzo-storage';
+      process.env.R2_PUBLIC_URL || '/storage';
     this.publicUrl = baseUrl.replace(/\/$/, '');
 
     this.s3 = new S3Client({
@@ -41,24 +41,13 @@ export class R2Service implements OnModuleInit {
   private async ensureBucketExists() {
     try {
       await this.s3.send(new HeadBucketCommand({ Bucket: this.bucketName }));
-      this.logger.log(`Bucket "${this.bucketName}" verified.`);
     } catch (error: any) {
-      if (
-        error.name === 'NotFound' ||
-        error.$metadata?.httpStatusCode === 404
-      ) {
-        this.logger.warn(`Bucket "${this.bucketName}" not found. Creating...`);
-
-        await this.s3.send(
-          new CreateBucketCommand({ Bucket: this.bucketName }),
-        );
-
-        // Only apply S3 policies if we are NOT on Cloudflare R2
-        // Cloudflare R2 will throw an error on PutBucketPolicy
-        if (!process.env.R2_ENDPOINT_URL?.includes('cloudflare.com')) {
-          await this.applyMinioPublicPolicy();
-        }
+      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+        await this.s3.send(new CreateBucketCommand({ Bucket: this.bucketName }));
       }
+    }
+    if (!process.env.R2_ENDPOINT_URL?.includes('cloudflare.com')) {
+      await this.applyMinioPublicPolicy();
     }
   }
 
@@ -103,8 +92,8 @@ export class R2Service implements OnModuleInit {
           Key: key,
           Body: file.buffer,
           ContentType: file.mimetype,
-          // ACL: 'public-read' is the standard for S3/MinIO
-          ACL: ObjectCannedACL.public_read,
+          // ACL: 'public-read' is the standard for S3/MinIO, but not supported by R2
+          ...(process.env.R2_ENDPOINT_URL?.includes('cloudflare.com') ? {} : { ACL: ObjectCannedACL.public_read }),
         }),
       );
 

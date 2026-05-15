@@ -55,4 +55,12 @@ export class User {
 
   @Column({ nullable: true })
   avatar: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  notificationSettings: {
+    smartInsights: boolean;
+    transactionAlerts: boolean;
+    securityAlerts: boolean;
+    groupAlerts: boolean;
+  };
 }
