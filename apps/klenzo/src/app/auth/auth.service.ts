@@ -246,6 +246,7 @@ export class AuthService {
     if (dto.email !== undefined) updates.email = dto.email;
     if (dto.name !== undefined) updates.name = dto.name;
     if (dto.phone !== undefined) updates.phone = dto.phone;
+    if (dto.notificationSettings !== undefined) updates.notificationSettings = dto.notificationSettings;
 
     if (dto.avatar) {
       console.log('Backend: Avatar is a regular URL:', dto.avatar);
@@ -315,6 +316,7 @@ export class AuthService {
       role: user.role,
       isActive: user.isActive,
       lastLogin: user.lastLogin ?? null,
+      notificationSettings: user.notificationSettings ?? null,
       createdAt: user.createdAt,
     };
   }

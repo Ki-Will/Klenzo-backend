@@ -47,6 +47,14 @@ export class UpdateProfileDto {
   @IsString()
   @IsOptional()
   avatar?: string;
+
+  @IsOptional()
+  notificationSettings?: {
+    smartInsights: boolean;
+    transactionAlerts: boolean;
+    securityAlerts: boolean;
+    groupAlerts: boolean;
+  };
 }
 
 export class ChangePasswordDto {
