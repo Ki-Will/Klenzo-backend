@@ -66,10 +66,7 @@ export class AdminController {
 
   @Delete('users/:id')
   @HttpCode(HttpStatus.OK)
-  deleteUser(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  deleteUser(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
     return this.adminService.deleteUser(id, user.id);
   }
 
@@ -113,6 +110,7 @@ export class AdminController {
   async createBroadcast(
     @Body()
     dto: {
+      title?: string;
       message: string;
       /**
        * Optional hex color for the banner background.
@@ -126,19 +124,21 @@ export class AdminController {
       startDate?: string;
       endDate?: string;
       sendEmail?: boolean;
+      priority?: 'low' | 'normal' | 'high';
     },
   ) {
     // Validate hex format — reject anything that isn't #rrggbb
-    if (dto.color !== undefined) {
-      const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-      if (!HEX_RE.test(dto.color)) {
-        dto.color = '#6366f1'; // silently fall back to default
-      }
-    }
+    // if (dto.color !== undefined) {
+    //   const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+    //   if (!HEX_RE.test(dto.color)) {
+    //     dto.color = '#6366f1'; // silently fall back to default
+    //   }
+    // }
 
     const allUsers = await this.adminService.getAllActiveUsers();
-    const userIds = allUsers.map(u => u.id);
-    const userEmails = allUsers.map(u => ({ id: u.id, email: u.email }));
+    const userIds = allUsers.map((u) => u.id);
+    const userEmails = allUsers.map((u) => ({ id: u.id, email: u.email }));
+    console.log(dto);
 
     return this.notificationService.createBroadcast(dto, userIds, userEmails);
   }
