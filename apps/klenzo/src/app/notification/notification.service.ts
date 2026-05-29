@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import * as nodemailer from 'nodemailer';
 import {
   Notification,
@@ -93,40 +93,54 @@ export class NotificationService {
   }
 
   async sendWelcomeEmail(email: string) {
-    const html = this.emailWrapper('Welcome!',
+    const html = this.emailWrapper(
+      'Welcome!',
       `<h2 style="color:#f1f5f9;">🎉 Welcome to Klenzo!</h2>
 <p>Your all-in-one platform for productivity, habits, and finance.</p>` +
-      this.btn('Go to Dashboard', process.env.FRONTEND_URL || 'http://localhost:5000'));
+        this.btn(
+          'Go to Dashboard',
+          process.env.FRONTEND_URL || 'http://localhost:5000',
+        ),
+    );
     await this.sendEmail(email, 'Welcome to Klenzo! 🎉', html);
   }
 
   async sendPasswordResetEmail(email: string, token: string) {
     const url = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password?token=${encodeURIComponent(token)}`;
-    const html = this.emailWrapper('Password Reset',
+    const html = this.emailWrapper(
+      'Password Reset',
       `<h2 style="color:#f1f5f9;">🔐 Password Reset</h2>
 <p>Click below to reset your password. Expires in <strong>1 hour</strong>.</p>` +
-      this.btn('Reset Password', url, '#ef4444') +
-      `<p style="color:#94a3b8;font-size:13px;">Didn't request this? Ignore this email.</p>`);
+        this.btn('Reset Password', url, '#ef4444') +
+        `<p style="color:#94a3b8;font-size:13px;">Didn't request this? Ignore this email.</p>`,
+    );
     await this.sendEmail(email, 'Password Reset Request', html);
   }
 
   async sendAccountLockedEmail(email: string) {
     const url = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/forgot-password`;
-    const html = this.emailWrapper('Account Locked',
+    const html = this.emailWrapper(
+      'Account Locked',
       `<h2 style="color:#f1f5f9;">⚠️ Account Locked</h2>
 <p>Your account was locked after 5 failed login attempts.</p>` +
-      this.btn('Reset Password', url, '#ef4444'));
+        this.btn('Reset Password', url, '#ef4444'),
+    );
     await this.sendEmail(email, 'Account Security Alert', html);
   }
 
   async sendAdminBroadcastEmail(email: string, title: string, message: string) {
-    const html = this.emailWrapper(title,
+    const html = this.emailWrapper(
+      title,
       `<div style="background:linear-gradient(135deg,#f59e0b,#ef4444);padding:3px;border-radius:12px;margin-bottom:20px;">
 <div style="background:#1e293b;border-radius:10px;padding:1px 16px;">
 <p style="color:#fbbf24;font-size:13px;font-weight:600;">📢 ADMIN ANNOUNCEMENT</p></div></div>
 <h2 style="color:#f1f5f9;">${title}</h2>
 <p style="color:#e2e8f0;">${message.replace(/\n/g, '<br>')}</p>` +
-      this.btn('View Dashboard', process.env.FRONTEND_URL || 'http://localhost:5000'));
+        this.btn(
+          'View Dashboard',
+          process.env.FRONTEND_URL || 'http://localhost:5000',
+        ),
+    );
     await this.sendEmail(email, `[Klenzo] ${title}`, html);
   }
 
@@ -137,10 +151,6 @@ export class NotificationService {
    * Returns the value unchanged if valid, or the platform default '#6366f1'.
    * Only used for banners — regular notifications always get null.
    */
-  private resolveBannerColor(raw: string | undefined | null): string {
-    const HEX = /^#[0-9a-fA-F]{6}$/;
-    return raw && HEX.test(raw) ? raw : '#6366f1';
-  }
 
   /** Map a raw Notification entity to the typed BannerResponse shape. */
   private toBannerResponse(n: Notification): BannerResponse {
@@ -148,12 +158,12 @@ export class NotificationService {
       id: n.id,
       title: n.title,
       message: n.message ?? '',
-      color: n.color ?? '#6366f1',   // always a hex string for banners
+      color: n.color ?? '#6366f1', // always a hex string for banners
       dismissible: n.dismissible,
       link: n.link,
       linkText: n.linkText,
       startDate: n.startDate ? new Date(n.startDate).toISOString() : null,
-      endDate:   n.endDate   ? new Date(n.endDate).toISOString()   : null,
+      endDate: n.endDate ? new Date(n.endDate).toISOString() : null,
       isGlobal: n.isGlobal,
       createdAt: n.createdAt.toISOString(),
     };
@@ -189,34 +199,52 @@ export class NotificationService {
     const isBanner = params.category === NotificationCategory.BANNER;
 
     const notif = this.notificationRepository.create({
-      userId:     params.userId ?? null,
-      title:      params.title,
-      message:    params.message,
-      type:       params.type     ?? NotificationType.INFO,
-      category:   params.category ?? NotificationCategory.NOTIFICATION,
-      isGlobal:   params.userId === null || params.userId === undefined,
+      userId: params.userId ?? null,
+      title: params.title,
+      message: params.message,
+      type: params.type ?? NotificationType.INFO,
+      category: params.category ?? NotificationCategory.NOTIFICATION,
+      isGlobal: params.userId === null || params.userId === undefined,
       // Regular notifications → null (frontend uses `type` for color).
       // Banners → validated hex or platform default.
-      color:      isBanner ? this.resolveBannerColor(params.color) : null,
-      priority:   params.priority   ?? 'normal',
+      color: params.color ?? 'info',
+      priority: params.priority ?? 'normal',
       dismissible: params.dismissible !== false,
-      link:       params.link     ?? null,
-      linkText:   params.linkText ?? null,
-      startDate:  params.startDate ? new Date(params.startDate) : null,
-      endDate:    params.endDate   ? new Date(params.endDate)   : null,
+      link: params.link ?? null,
+      linkText: params.linkText ?? null,
+      startDate: params.startDate ? new Date(params.startDate) : null,
+      endDate: params.endDate ? new Date(params.endDate) : null,
     });
 
     // ── Check user preferences ───────────────────────────────────────────
     if (params.userId && !isBanner) {
-      const user = await this.userRepository.findOne({ where: { id: params.userId } });
+      const user = await this.userRepository.findOne({
+        where: { id: params.userId },
+      });
       if (user?.notificationSettings) {
         const settings = user.notificationSettings;
         const cat = params.category;
-        
-        if (cat === NotificationCategory.INSIGHT && settings.smartInsights === false) return null as any;
-        if (cat === NotificationCategory.TRANSACTION && settings.transactionAlerts === false) return null as any;
-        if (cat === NotificationCategory.SECURITY && settings.securityAlerts === false) return null as any;
-        if (cat === NotificationCategory.GROUP && settings.groupAlerts === false) return null as any;
+
+        if (
+          cat === NotificationCategory.INSIGHT &&
+          settings.smartInsights === false
+        )
+          return null as any;
+        if (
+          cat === NotificationCategory.TRANSACTION &&
+          settings.transactionAlerts === false
+        )
+          return null as any;
+        if (
+          cat === NotificationCategory.SECURITY &&
+          settings.securityAlerts === false
+        )
+          return null as any;
+        if (
+          cat === NotificationCategory.GROUP &&
+          settings.groupAlerts === false
+        )
+          return null as any;
       }
     }
 
@@ -225,7 +253,10 @@ export class NotificationService {
     // Invalidate relevant caches
     if (isBanner) {
       await this.invalidateBannerCache();
-      this.notificationGateway.broadcastToAll('banner', this.toBannerResponse(saved));
+      this.notificationGateway.broadcastToAll(
+        'banner',
+        this.toBannerResponse(saved),
+      );
     } else if (params.userId) {
       await this.invalidateUserNotifCache(params.userId);
       this.notificationGateway.sendToUser(params.userId, 'notification', saved);
@@ -238,6 +269,7 @@ export class NotificationService {
 
   async createBroadcast(
     dto: {
+      title?: string;
       message: string;
       color?: string;
       dismissible?: boolean;
@@ -246,14 +278,18 @@ export class NotificationService {
       startDate?: string;
       endDate?: string;
       sendEmail?: boolean;
+      priority?: 'low' | 'normal' | 'high';
     },
     allUserIds: number[],
     allUserEmails: { id: number; email: string }[],
   ): Promise<{ banner: BannerResponse; notificationsCount: number }> {
+    const title = dto.title || 'Admin Announcement';
+    const priority = dto.priority || 'normal';
+
     // 1. Global banner (cached + WS broadcast handled inside createNotification)
     const bannerEntity = await this.createNotification({
       userId: null,
-      title: 'Admin Announcement',
+      title,
       message: dto.message,
       type: NotificationType.INFO,
       category: NotificationCategory.BANNER,
@@ -263,25 +299,31 @@ export class NotificationService {
       linkText: dto.linkText,
       startDate: dto.startDate,
       endDate: dto.endDate,
+      priority,
     });
 
     // 2. Per-user inbox notification (fire-and-forget)
     for (const userId of allUserIds) {
       this.createNotification({
         userId,
-        title: 'Admin Announcement',
+        title,
         message: dto.message,
         type: NotificationType.INFO,
         category: NotificationCategory.NOTIFICATION,
-        priority: 'high',
-      }).catch((err) => this.logger.error(`Notif failed for user ${userId}`, err));
+        priority: dto.priority || 'high',
+      }).catch((err) =>
+        this.logger.error(`Notif failed for user ${userId}`, err),
+      );
     }
 
     // 3. Email broadcast (fire-and-forget)
     if (dto.sendEmail) {
       for (const u of allUserEmails) {
-        this.sendAdminBroadcastEmail(u.email, 'Admin Announcement', dto.message)
-          .catch((err) => this.logger.error(`Email failed for ${u.email}`, err));
+        this.sendAdminBroadcastEmail(
+          u.email,
+          title,
+          dto.message,
+        ).catch((err) => this.logger.error(`Email failed for ${u.email}`, err));
       }
     }
 
@@ -304,7 +346,11 @@ export class NotificationService {
     if (cached) return cached;
 
     const rows = await this.notificationRepository.find({
-      where: { userId, category: NotificationCategory.NOTIFICATION, isDismissed: false },
+      where: {
+        userId,
+        category: Not(NotificationCategory.BANNER),
+        isDismissed: false,
+      },
       order: { createdAt: 'DESC' },
     });
 
@@ -344,7 +390,7 @@ export class NotificationService {
     const active = rows
       .filter((b) => {
         if (b.startDate && new Date(b.startDate) > now) return false;
-        if (b.endDate   && new Date(b.endDate)   < now) return false;
+        if (b.endDate && new Date(b.endDate) < now) return false;
         return true;
       })
       .map((b) => this.toBannerResponse(b));
@@ -363,8 +409,13 @@ export class NotificationService {
 
   // ─── Mutations ────────────────────────────────────────────────────────────
 
-  async markAsRead(notificationId: number, userId: number): Promise<{ message: string }> {
-    const notif = await this.notificationRepository.findOne({ where: { id: notificationId, userId } });
+  async markAsRead(
+    notificationId: number,
+    userId: number,
+  ): Promise<{ message: string }> {
+    const notif = await this.notificationRepository.findOne({
+      where: { id: notificationId, userId },
+    });
     if (!notif) throw new NotFoundException('Notification not found');
     await this.notificationRepository.update(notificationId, { isRead: true });
     await this.invalidateUserNotifCache(userId);
@@ -372,15 +423,25 @@ export class NotificationService {
   }
 
   async markAllAsRead(userId: number): Promise<{ message: string }> {
-    await this.notificationRepository.update({ userId, isRead: false }, { isRead: true });
+    await this.notificationRepository.update(
+      { userId, isRead: false },
+      { isRead: true },
+    );
     await this.invalidateUserNotifCache(userId);
     return { message: 'All notifications marked as read' };
   }
 
-  async dismiss(notificationId: number, userId: number): Promise<{ message: string }> {
-    const notif = await this.notificationRepository.findOne({ where: { id: notificationId } });
+  async dismiss(
+    notificationId: number,
+    userId: number,
+  ): Promise<{ message: string }> {
+    const notif = await this.notificationRepository.findOne({
+      where: { id: notificationId },
+    });
     if (!notif) throw new NotFoundException('Notification not found');
-    await this.notificationRepository.update(notificationId, { isDismissed: true });
+    await this.notificationRepository.update(notificationId, {
+      isDismissed: true,
+    });
 
     // Invalidate the right cache depending on type
     if (notif.category === NotificationCategory.BANNER) {
