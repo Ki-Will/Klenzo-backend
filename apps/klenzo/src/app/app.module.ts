@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { loadConfig } from './config/configuration';
 
 // Entities
@@ -14,6 +14,8 @@ import { Group, GroupMember } from './entities/group.entity';
 import { Budget } from './entities/budget.entity';
 import { Account } from './entities/account.entity';
 import { Notification } from './entities/notification.entity';
+import { AuditLog } from './entities/audit-log.entity';
+import { SystemMetric } from './entities/system-metric.entity';
 
 // Feature modules
 import { RedisModule } from './redis/redis.module';
@@ -24,6 +26,10 @@ import { FinanceModule } from './finance/finance.module';
 import { NotificationModule } from './notification/notification.module';
 import { InsightModule } from './insight/insight.module';
 import { AdminModule } from './admin/admin.module';
+import { AuditModule } from './audit/audit.module';
+import { LoggerModule } from './logger/logger.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { AuditInterceptor } from './audit/audit.interceptor';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -54,6 +60,8 @@ const isDev = process.env.NODE_ENV !== 'production';
         Budget,
         Account,
         Notification,
+        AuditLog,
+        SystemMetric,
       ],
       synchronize: isDev,
       // dropSchema: true,
@@ -80,7 +88,13 @@ const isDev = process.env.NODE_ENV !== 'production';
     NotificationModule,
     InsightModule,
     AdminModule,
+    AuditModule,
+    LoggerModule,
+    MetricsModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+  ],
 })
 export class AppModule {}
