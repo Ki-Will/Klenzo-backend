@@ -214,3 +214,38 @@ CREATE INDEX IF NOT EXISTS idx_notifications_category
     ON notifications.notifications(category);
 CREATE INDEX IF NOT EXISTS idx_notifications_read
     ON notifications.notifications("isRead");
+
+-- ── Observability ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "actorId"     INTEGER,
+    "actorRole"   VARCHAR(32) NOT NULL,
+    action        VARCHAR(128) NOT NULL,
+    "targetType"  VARCHAR(64),
+    "targetId"    VARCHAR(64),
+    metadata      JSONB,
+    "ipAddress"   VARCHAR(45),
+    "requestPath" VARCHAR(512),
+    "createdAt"   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.system_metrics (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "metricName"  VARCHAR(128) NOT NULL,
+    value         DECIMAL(18,4) NOT NULL,
+    labels        JSONB,
+    "recordedAt"  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for Observability
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor
+    ON public.audit_logs("actorId");
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action
+    ON public.audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created
+    ON public.audit_logs("createdAt");
+
+CREATE INDEX IF NOT EXISTS idx_system_metrics_name_date
+    ON public.system_metrics("metricName", "recordedAt");
+
