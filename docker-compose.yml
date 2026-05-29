@@ -60,8 +60,8 @@ services:
       - "8025:8025"   # Web UI
     networks:
       - klenzo_network
-    profiles:
-      - development
+    # profiles:
+    #   - development
 
   # ── Application ─────────────────────────────────────────────────────────────
   #
