@@ -76,6 +76,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "express-rate-limit": "^8.3.1",
+    "helmet": "^8.2.0",
     "ioredis": "^5.10.0",
     "multer": "^1.4.5-lts.1",
     "nats": "^2.29.3",

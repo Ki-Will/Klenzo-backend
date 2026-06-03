@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { loadConfig } from './config/configuration';
+import { loadConfig, validate } from './config/configuration';
 
 // Entities
 import { User } from './entities/user.entity';
@@ -38,6 +38,7 @@ const isDev = process.env.NODE_ENV !== 'production';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [loadConfig],
+      validate,
       envFilePath: '.env',
       ignoreEnvFile: !isDev,
     }),

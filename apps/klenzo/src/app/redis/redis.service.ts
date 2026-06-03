@@ -1,10 +1,13 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private client: Redis;
+
+  constructor(private readonly config: ConfigService) {}
 
   // ── TTL constants (seconds) ───────────────────────────────────────────────
   static readonly TTL = {
@@ -15,9 +18,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   } as const;
 
   onModuleInit() {
+    const host = this.config.get<string>('redis.host') || 'localhost';
+    const port = this.config.get<number>('redis.port') || 6379;
+
     this.client = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      host,
+      port,
       lazyConnect: true,
       retryStrategy: (times) => {
         if (times > 5) {
@@ -88,5 +94,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     userNotifications: (uid: number) => `notif:user:${uid}`,
     userProfile:       (uid: number) => `user:profile:${uid}`,
     insights:          (uid: number) => `insights:dashboard:${uid}`,
+    userSessions:      (uid: number) => `user:sessions:${uid}`,
+    transactions:      (uid: number) => `finance:transactions:${uid}`,
   };
+
+  async setEx(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+    await this.set(key, value, ttlSeconds);
+  }
 }
