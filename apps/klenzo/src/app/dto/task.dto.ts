@@ -13,6 +13,7 @@ import { TaskStatus } from '../entities/task.entity';
 export class CreateTaskDto {
   @IsString()
   @IsNotEmpty()
+  @MinLength(3)
   title: string;
 
   @IsString()
