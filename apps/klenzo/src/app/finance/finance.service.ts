@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, MoreThanOrEqual, LessThanOrEqual, IsNull } from 'typeorm';
+import { RedisService } from '../redis/redis.service';
 import { Transaction, TransactionStatus, TransactionType } from '../entities/transaction.entity';
 import { Group, GroupMember } from '../entities/group.entity';
 import { Budget } from '../entities/budget.entity';
@@ -40,6 +41,7 @@ export class FinanceService {
     private readonly userRepository: Repository<User>,
     private readonly notificationService: NotificationService,
     private readonly insightService: InsightService,
+    private readonly redis: RedisService,
   ) { }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
@@ -85,14 +87,21 @@ export class FinanceService {
     }
 
     this.insightService.invalidateDashboard(userId).catch(() => null);
+    await this.redis.del(RedisService.keys.transactions(userId));
     return saved;
   }
 
   async getTransactions(userId: number): Promise<Transaction[]> {
-    return this.transactionRepo.find({
+    const cacheKey = RedisService.keys.transactions(userId);
+    const cached = await this.redis.get<Transaction[]>(cacheKey);
+    if (cached) return cached;
+
+    const transactions = await this.transactionRepo.find({
       where: { userId, status: TransactionStatus.APPROVED },
       order: { date: 'DESC' },
     });
+    await this.redis.set(cacheKey, transactions, 60); // Cache for 1 min
+    return transactions;
   }
 
   async getTransaction(userId: number, transactionId: number): Promise<Transaction> {
@@ -118,6 +127,7 @@ export class FinanceService {
 
     await this.transactionRepo.delete(transactionId);
     this.insightService.invalidateDashboard(userId).catch(() => null);
+    await this.redis.del(RedisService.keys.transactions(userId));
     return { message: 'Transaction deleted' };
   }
 
@@ -167,6 +177,7 @@ export class FinanceService {
     }
 
     this.insightService.invalidateDashboard(userId).catch(() => null);
+    await this.redis.del(RedisService.keys.transactions(userId));
     return saved;
   }
 
@@ -197,6 +208,7 @@ export class FinanceService {
     }
 
     this.insightService.invalidateDashboard(userId).catch(() => null);
+    await this.redis.del(RedisService.keys.transactions(userId));
     return saved;
   }
 

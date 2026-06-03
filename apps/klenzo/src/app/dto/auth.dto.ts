@@ -6,6 +6,7 @@ export class RegisterDto {
 
   @IsString()
   @MinLength(8)
+  @IsNotEmpty()
   password: string;
 }
 
@@ -38,6 +39,7 @@ export class UpdateProfileDto {
 
   @IsString()
   @IsOptional()
+  @MinLength(2)
   name?: string;
 
   @IsString()

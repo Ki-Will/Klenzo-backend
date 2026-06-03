@@ -32,7 +32,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `Unhandled error on ${request.method} ${request.url}: ${exception.message}`,
         exception.stack,
       );
-      message = exception.message;
+      message =
+        process.env.NODE_ENV === 'production'
+          ? 'Internal server error'
+          : exception.message;
     } else {
       this.logger.error(`Unknown exception on ${request.method} ${request.url}`, exception);
     }

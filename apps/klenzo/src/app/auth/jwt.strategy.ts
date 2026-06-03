@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Request } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { User } from '../entities/user.entity';
 import { RedisService } from '../redis/redis.service';
 
@@ -18,6 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly redis: RedisService,
+    private readonly configService: ConfigService,
   ) {
     super({
       // Cookie first (browser), then Authorization header (API clients / Postman)
@@ -25,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         (req: Request) => req?.cookies?.kz_at ?? null,
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
-      secretOrKey: process.env.JWT_SECRET || 'KlenzoSecret',
+      secretOrKey: configService.get<string>('jwtSecret'),
       ignoreExpiration: false,
     });
   }

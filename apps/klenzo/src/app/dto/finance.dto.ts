@@ -21,6 +21,7 @@ export class CreateTransactionDto {
 
   @IsString()
   @IsOptional()
+  @MinLength(3)
   description?: string;
 
   @IsString()
@@ -118,6 +119,7 @@ export class UpdateTransactionDto {
 export class CreateGroupDto {
   @IsString()
   @IsNotEmpty()
+  @MinLength(3)
   name: string;
 
   /**

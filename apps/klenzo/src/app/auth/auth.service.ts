@@ -29,7 +29,6 @@ interface Session {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private sessions = new Map<number, Session[]>();
 
   constructor(
     @InjectRepository(User)
@@ -159,7 +158,7 @@ export class AuthService {
       refreshToken: null as any,
       refreshTokenExpires: null as any,
     });
-    this.sessions.delete(userId);
+    await this.redis.del(RedisService.keys.userSessions(userId));
     // Evict cached profile so the next request re-validates from DB
     await this.redis.del(RedisService.keys.userProfile(userId));
   }
@@ -281,7 +280,8 @@ export class AuthService {
   // ─── Sessions ─────────────────────────────────────────────────────────────
 
   async getSessions(userId: number) {
-    const userSessions = this.sessions.get(userId) || [];
+    const cacheKey = RedisService.keys.userSessions(userId);
+    const userSessions = (await this.redis.get<Session[]>(cacheKey)) || [];
     return userSessions.map((s, idx) => ({
       id: s.id,
       device: s.device,
@@ -295,11 +295,10 @@ export class AuthService {
     userId: number,
     sessionId: string,
   ): Promise<{ success: boolean }> {
-    const existing = this.sessions.get(userId) || [];
-    this.sessions.set(
-      userId,
-      existing.filter((s) => s.id !== sessionId),
-    );
+    const cacheKey = RedisService.keys.userSessions(userId);
+    const existing = (await this.redis.get<Session[]>(cacheKey)) || [];
+    const updated = existing.filter((s) => s.id !== sessionId);
+    await this.redis.set(cacheKey, updated, 86400 * 7); // 7 days
     return { success: true };
   }
 
@@ -321,17 +320,18 @@ export class AuthService {
     };
   }
 
-  private trackSession(userId: number, device: string) {
+  private async trackSession(userId: number, device: string) {
     const session: Session = {
       id: crypto.randomUUID(),
       device,
       location: 'Unknown',
       lastSeen: new Date(),
     };
-    const existing = this.sessions.get(userId) || [];
+    const cacheKey = RedisService.keys.userSessions(userId);
+    const existing = (await this.redis.get<Session[]>(cacheKey)) || [];
     // Keep last 5 sessions per user
     const updated = [...existing, session].slice(-5);
-    this.sessions.set(userId, updated);
+    await this.redis.set(cacheKey, updated, 86400 * 7); // 7 days
   }
 
   private async generateRefreshToken(userId: number): Promise<string> {
