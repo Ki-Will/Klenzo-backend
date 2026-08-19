@@ -8,7 +8,13 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { TaskStatus } from '../entities/task.entity';
+
+export enum TaskStatus {
+  TODO = 'TODO',
+  IN_PROGRESS = 'IN_PROGRESS',
+  DONE = 'DONE',
+  CANCELLED = 'CANCELLED',
+}
 
 export class CreateTaskDto {
   @IsString()

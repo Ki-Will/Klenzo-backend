@@ -7,7 +7,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseIntPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -17,7 +16,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { Role } from '@prisma/client';
+
+interface UserPayload {
+  id: string;
+  email: string;
+  role: Role;
+}
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'superadmin')
@@ -51,14 +56,14 @@ export class AdminController {
   }
 
   @Get('users/:id')
-  getUserById(@Param('id', ParseIntPipe) id: number) {
+  getUserById(@Param('id') id: string) {
     return this.adminService.getUserById(id);
   }
 
   @Post('users/:id/toggle-active')
   @HttpCode(HttpStatus.OK)
   toggleUserActive(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: { active: boolean },
   ) {
     return this.adminService.toggleUserActive(id, dto.active);
@@ -66,7 +71,7 @@ export class AdminController {
 
   @Delete('users/:id')
   @HttpCode(HttpStatus.OK)
-  deleteUser(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
+  deleteUser(@CurrentUser() user: UserPayload, @Param('id') id: string) {
     return this.adminService.deleteUser(id, user.id);
   }
 
@@ -81,7 +86,7 @@ export class AdminController {
   @Post('admins')
   @HttpCode(HttpStatus.CREATED)
   createAdmin(
-    @CurrentUser() currentAdmin: User,
+    @CurrentUser() currentAdmin: UserPayload,
     @Body()
     dto: {
       email: string;
@@ -97,8 +102,8 @@ export class AdminController {
   @Delete('admins/:id')
   @HttpCode(HttpStatus.OK)
   deleteAdmin(
-    @CurrentUser() currentAdmin: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentAdmin: UserPayload,
+    @Param('id') id: string,
   ) {
     return this.adminService.deleteAdmin(id, currentAdmin);
   }
@@ -127,14 +132,6 @@ export class AdminController {
       priority?: 'low' | 'normal' | 'high';
     },
   ) {
-    // Validate hex format — reject anything that isn't #rrggbb
-    // if (dto.color !== undefined) {
-    //   const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-    //   if (!HEX_RE.test(dto.color)) {
-    //     dto.color = '#6366f1'; // silently fall back to default
-    //   }
-    // }
-
     const allUsers = await this.adminService.getAllActiveUsers();
     const userIds = allUsers.map((u) => u.id);
     const userEmails = allUsers.map((u) => ({ id: u.id, email: u.email }));
@@ -150,7 +147,7 @@ export class AdminController {
 
   @Delete('broadcast/:id')
   @HttpCode(HttpStatus.OK)
-  deleteBroadcast(@Param('id', ParseIntPipe) id: number) {
+  deleteBroadcast(@Param('id') id: string) {
     return this.notificationService.deleteBanner(id);
   }
 }

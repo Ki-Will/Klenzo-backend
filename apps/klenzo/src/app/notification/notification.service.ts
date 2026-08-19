@@ -1,19 +1,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not } from 'typeorm';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationType, NotificationCategory } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
-import {
-  Notification,
-  NotificationType,
-  NotificationCategory,
-} from '../entities/notification.entity';
 import { NotificationGateway } from './notification.gateway';
 import { RedisService } from '../redis/redis.service';
-import { User } from '../entities/user.entity';
 
 // ── Banner response shape ─────────────────────────────────────────────────────
 export interface BannerResponse {
-  id: number;
+  id: string;
   title: string;
   message: string;
   /** Hex color set by admin, e.g. '#6366f1'. Always present on banners. */
@@ -36,10 +30,7 @@ export class NotificationService {
   private transporter: nodemailer.Transporter;
 
   constructor(
-    @InjectRepository(Notification)
-    private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly prisma: PrismaService,
     private readonly notificationGateway: NotificationGateway,
     private readonly redis: RedisService,
   ) {
@@ -146,14 +137,8 @@ export class NotificationService {
 
   // ─── Color helpers ────────────────────────────────────────────────────────
 
-  /**
-   * Validates a hex color string.
-   * Returns the value unchanged if valid, or the platform default '#6366f1'.
-   * Only used for banners — regular notifications always get null.
-   */
-
   /** Map a raw Notification entity to the typed BannerResponse shape. */
-  private toBannerResponse(n: Notification): BannerResponse {
+  private toBannerResponse(n: { id: string; title: string; message: string | null; color: string | null; dismissible: boolean; link: string | null; linkText: string | null; startDate: Date | null; endDate: Date | null; isGlobal: boolean; createdAt: Date }): BannerResponse {
     return {
       id: n.id,
       title: n.title,
@@ -175,14 +160,14 @@ export class NotificationService {
     await this.redis.del(RedisService.keys.banners());
   }
 
-  private async invalidateUserNotifCache(userId: number) {
+  private async invalidateUserNotifCache(userId: string) {
     await this.redis.del(RedisService.keys.userNotifications(userId));
   }
 
   // ─── Create notification / banner ─────────────────────────────────────────
 
   async createNotification(params: {
-    userId?: number | null;
+    userId?: string | null;
     title: string;
     message: string;
     type?: NotificationType;
@@ -195,60 +180,58 @@ export class NotificationService {
     linkText?: string;
     startDate?: string;
     endDate?: string;
-  }): Promise<Notification> {
+  }): Promise<any | null> {
     const isBanner = params.category === NotificationCategory.BANNER;
-
-    const notif = this.notificationRepository.create({
-      userId: params.userId ?? null,
-      title: params.title,
-      message: params.message,
-      type: params.type ?? NotificationType.INFO,
-      category: params.category ?? NotificationCategory.NOTIFICATION,
-      isGlobal: params.userId === null || params.userId === undefined,
-      // Regular notifications → null (frontend uses `type` for color).
-      // Banners → validated hex or platform default.
-      color: params.color ?? 'info',
-      priority: params.priority ?? 'normal',
-      dismissible: params.dismissible !== false,
-      link: params.link ?? null,
-      linkText: params.linkText ?? null,
-      startDate: params.startDate ? new Date(params.startDate) : null,
-      endDate: params.endDate ? new Date(params.endDate) : null,
-    });
 
     // ── Check user preferences ───────────────────────────────────────────
     if (params.userId && !isBanner) {
-      const user = await this.userRepository.findOne({
+      const user = await this.prisma.user.findUnique({
         where: { id: params.userId },
       });
       if (user?.notificationSettings) {
-        const settings = user.notificationSettings;
+        const settings = user.notificationSettings as any;
         const cat = params.category;
 
         if (
           cat === NotificationCategory.INSIGHT &&
           settings.smartInsights === false
         )
-          return null as any;
+          return null;
         if (
           cat === NotificationCategory.TRANSACTION &&
           settings.transactionAlerts === false
         )
-          return null as any;
+          return null;
         if (
           cat === NotificationCategory.SECURITY &&
           settings.securityAlerts === false
         )
-          return null as any;
+          return null;
         if (
           cat === NotificationCategory.GROUP &&
           settings.groupAlerts === false
         )
-          return null as any;
+          return null;
       }
     }
 
-    const saved = await this.notificationRepository.save(notif);
+    const saved = await this.prisma.notification.create({
+      data: {
+        userId: params.userId ?? null,
+        title: params.title,
+        message: params.message,
+        type: params.type ?? NotificationType.INFO,
+        category: params.category ?? NotificationCategory.NOTIFICATION,
+        isGlobal: params.userId === null || params.userId === undefined,
+        color: params.color ?? 'info',
+        priority: params.priority ?? 'normal',
+        dismissible: params.dismissible !== false,
+        link: params.link ?? null,
+        linkText: params.linkText ?? null,
+        startDate: params.startDate ? new Date(params.startDate) : null,
+        endDate: params.endDate ? new Date(params.endDate) : null,
+      },
+    });
 
     // Invalidate relevant caches
     if (isBanner) {
@@ -280,8 +263,8 @@ export class NotificationService {
       sendEmail?: boolean;
       priority?: 'low' | 'normal' | 'high';
     },
-    allUserIds: number[],
-    allUserEmails: { id: number; email: string }[],
+    allUserIds: string[],
+    allUserEmails: { id: string; email: string }[],
   ): Promise<{ banner: BannerResponse; notificationsCount: number }> {
     const title = dto.title || 'Admin Announcement';
     const priority = dto.priority || 'normal';
@@ -328,7 +311,7 @@ export class NotificationService {
     }
 
     return {
-      banner: this.toBannerResponse(bannerEntity),
+      banner: this.toBannerResponse(bannerEntity!),
       notificationsCount: allUserIds.length,
     };
   }
@@ -340,18 +323,18 @@ export class NotificationService {
    * Returns the user's unread, undismissed inbox notifications.
    * Cached in Redis for 30 s; invalidated on any write for this user.
    */
-  async getNotifications(userId: number): Promise<Notification[]> {
+  async getNotifications(userId: string) {
     const key = RedisService.keys.userNotifications(userId);
-    const cached = await this.redis.get<Notification[]>(key);
+    const cached = await this.redis.get<any[]>(key);
     if (cached) return cached;
 
-    const rows = await this.notificationRepository.find({
+    const rows = await this.prisma.notification.findMany({
       where: {
         userId,
-        category: Not(NotificationCategory.BANNER),
+        category: { not: NotificationCategory.BANNER },
         isDismissed: false,
       },
-      order: { createdAt: 'DESC' },
+      orderBy: { createdAt: 'desc' },
     });
 
     await this.redis.set(key, rows, RedisService.TTL.NOTIFICATIONS);
@@ -362,19 +345,6 @@ export class NotificationService {
    * GET /api/banners/active
    * Returns active banners as typed BannerResponse objects.
    * Cached in Redis for 5 min; invalidated when any banner is created/deleted/dismissed.
-   *
-   * Response shape per banner:
-   * {
-   *   id, title, message,
-   *   color: '#6366f1',   ← always a hex string
-   *   dismissible: true,
-   *   link: null,
-   *   linkText: null,
-   *   startDate: null,
-   *   endDate: null,
-   *   isGlobal: true,
-   *   createdAt: '2026-...'
-   * }
    */
   async getActiveBanners(): Promise<BannerResponse[]> {
     const key = RedisService.keys.banners();
@@ -382,9 +352,9 @@ export class NotificationService {
     if (cached) return cached;
 
     const now = new Date();
-    const rows = await this.notificationRepository.find({
+    const rows = await this.prisma.notification.findMany({
       where: { category: NotificationCategory.BANNER, isDismissed: false },
-      order: { createdAt: 'DESC' },
+      orderBy: { createdAt: 'desc' },
     });
 
     const active = rows
@@ -400,9 +370,9 @@ export class NotificationService {
   }
 
   async getAllBanners(): Promise<BannerResponse[]> {
-    const rows = await this.notificationRepository.find({
+    const rows = await this.prisma.notification.findMany({
       where: { category: NotificationCategory.BANNER },
-      order: { createdAt: 'DESC' },
+      orderBy: { createdAt: 'desc' },
     });
     return rows.map((b) => this.toBannerResponse(b));
   }
@@ -410,37 +380,41 @@ export class NotificationService {
   // ─── Mutations ────────────────────────────────────────────────────────────
 
   async markAsRead(
-    notificationId: number,
-    userId: number,
+    notificationId: string,
+    userId: string,
   ): Promise<{ message: string }> {
-    const notif = await this.notificationRepository.findOne({
+    const notif = await this.prisma.notification.findFirst({
       where: { id: notificationId, userId },
     });
     if (!notif) throw new NotFoundException('Notification not found');
-    await this.notificationRepository.update(notificationId, { isRead: true });
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: { isRead: true },
+    });
     await this.invalidateUserNotifCache(userId);
     return { message: 'Marked as read' };
   }
 
-  async markAllAsRead(userId: number): Promise<{ message: string }> {
-    await this.notificationRepository.update(
-      { userId, isRead: false },
-      { isRead: true },
-    );
+  async markAllAsRead(userId: string): Promise<{ message: string }> {
+    await this.prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
     await this.invalidateUserNotifCache(userId);
     return { message: 'All notifications marked as read' };
   }
 
   async dismiss(
-    notificationId: number,
-    userId: number,
+    notificationId: string,
+    userId: string,
   ): Promise<{ message: string }> {
-    const notif = await this.notificationRepository.findOne({
+    const notif = await this.prisma.notification.findUnique({
       where: { id: notificationId },
     });
     if (!notif) throw new NotFoundException('Notification not found');
-    await this.notificationRepository.update(notificationId, {
-      isDismissed: true,
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: { isDismissed: true },
     });
 
     // Invalidate the right cache depending on type
@@ -452,12 +426,12 @@ export class NotificationService {
     return { message: 'Notification dismissed' };
   }
 
-  async deleteBanner(id: number): Promise<{ success: boolean }> {
-    const notif = await this.notificationRepository.findOne({
+  async deleteBanner(id: string): Promise<{ success: boolean }> {
+    const notif = await this.prisma.notification.findFirst({
       where: { id, category: NotificationCategory.BANNER },
     });
     if (!notif) throw new NotFoundException('Banner not found');
-    await this.notificationRepository.remove(notif);
+    await this.prisma.notification.delete({ where: { id } });
     await this.invalidateBannerCache();
     return { success: true };
   }

@@ -3,40 +3,51 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Task } from '../entities/task.entity';
-import { CreateTaskDto, UpdateTaskDto } from '../dto/task.dto';
+import { PrismaService } from '../prisma/prisma.service';
+import { TaskStatus, NotificationType } from '@prisma/client';
+import { CreateTaskDto, UpdateTaskDto, TaskStatus as DtoTaskStatus } from '../dto/task.dto';
 import { NotificationService } from '../notification/notification.service';
-import { NotificationType } from '../entities/notification.entity';
 
 
 @Injectable()
 export class ProductivityService {
   constructor(
-    @InjectRepository(Task)
-    private readonly taskRepository: Repository<Task>,
+    private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
   ) {}
 
-  async createTask(userId: number, dto: CreateTaskDto): Promise<Task> {
-    const task = this.taskRepository.create({
-      ...dto,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      userId,
-    });
-    return this.taskRepository.save(task);
+  private mapTaskStatus(status: DtoTaskStatus): TaskStatus {
+    const mapping: Record<DtoTaskStatus, TaskStatus> = {
+      [DtoTaskStatus.TODO]: TaskStatus.TODO,
+      [DtoTaskStatus.IN_PROGRESS]: TaskStatus.IN_PROGRESS,
+      [DtoTaskStatus.DONE]: TaskStatus.DONE,
+      [DtoTaskStatus.CANCELLED]: TaskStatus.CANCELLED,
+    };
+    return mapping[status];
   }
 
-  async getTasks(userId: number): Promise<Task[]> {
-    return this.taskRepository.find({
+  async createTask(userId: string, dto: CreateTaskDto) {
+    return this.prisma.task.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        status: dto.status ? this.mapTaskStatus(dto.status) : TaskStatus.TODO,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        priority: dto.priority,
+        userId,
+      },
+    });
+  }
+
+  async getTasks(userId: string) {
+    return this.prisma.task.findMany({
       where: { userId },
-      order: { priority: 'DESC', createdAt: 'DESC' },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
-  async getTask(userId: number, taskId: number): Promise<Task> {
-    const task = await this.taskRepository.findOne({
+  async getTask(userId: string, taskId: string) {
+    const task = await this.prisma.task.findUnique({
       where: { id: taskId },
     });
     if (!task) throw new NotFoundException('Task not found');
@@ -45,21 +56,26 @@ export class ProductivityService {
   }
 
   async updateTask(
-    userId: number,
-    taskId: number,
+    userId: string,
+    taskId: string,
     dto: UpdateTaskDto,
-  ): Promise<Task> {
-    const task = await this.getTask(userId, taskId);
-    Object.assign(task, {
-      ...dto,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : task.dueDate,
+  ) {
+    await this.getTask(userId, taskId);
+    return this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        title: dto.title,
+        description: dto.description,
+        status: dto.status ? this.mapTaskStatus(dto.status) : undefined,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        priority: dto.priority,
+      },
     });
-    return this.taskRepository.save(task);
   }
 
-  async deleteTask(userId: number, taskId: number): Promise<{ message: string }> {
+  async deleteTask(userId: string, taskId: string): Promise<{ message: string }> {
     const task = await this.getTask(userId, taskId);
-    await this.taskRepository.remove(task);
+    await this.prisma.task.delete({ where: { id: taskId } });
     this.notificationService
       .createNotification({
         userId,

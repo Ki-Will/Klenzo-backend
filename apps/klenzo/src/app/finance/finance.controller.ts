@@ -8,7 +8,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseIntPipe,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
@@ -16,7 +15,7 @@ import {
 import { FinanceService } from './finance.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { UserPayload } from '../auth/jwt.strategy';
 import {
   CreateTransactionDto,
   CreateGroupDto,
@@ -35,32 +34,32 @@ export class FinanceController {
 
   @Post('transactions')
   @HttpCode(HttpStatus.CREATED)
-  createTransaction(@CurrentUser() user: User, @Body() dto: CreateTransactionDto) {
+  createTransaction(@CurrentUser() user: UserPayload, @Body() dto: CreateTransactionDto) {
     return this.financeService.createTransaction(user.id, dto);
   }
 
   /** Returns only APPROVED transactions for the user's personal view */
   @Get('transactions')
-  getTransactions(@CurrentUser() user: User) {
+  getTransactions(@CurrentUser() user: UserPayload) {
     return this.financeService.getTransactions(user.id);
   }
 
   @Get('transactions/:id')
-  getTransaction(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
+  getTransaction(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.getTransaction(user.id, id);
   }
 
   @Delete('transactions/:id')
   @HttpCode(HttpStatus.OK)
-  deleteTransaction(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
+  deleteTransaction(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.deleteTransaction(user.id, id);
   }
 
   @Patch('transactions/:id')
   @HttpCode(HttpStatus.OK)
   updateTransaction(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTransactionDto,
   ) {
     return this.financeService.updateTransaction(user.id, id, dto);
@@ -73,7 +72,7 @@ export class FinanceController {
    */
   @Post('transactions/:id/approve')
   @HttpCode(HttpStatus.OK)
-  approveTransaction(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
+  approveTransaction(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.approveTransaction(user.id, id);
   }
 
@@ -81,17 +80,17 @@ export class FinanceController {
 
   @Post('groups')
   @HttpCode(HttpStatus.CREATED)
-  createGroup(@CurrentUser() user: User, @Body() dto: CreateGroupDto) {
+  createGroup(@CurrentUser() user: UserPayload, @Body() dto: CreateGroupDto) {
     return this.financeService.createGroup(user.id, dto);
   }
 
   @Get('groups')
-  getGroups(@CurrentUser() user: User) {
+  getGroups(@CurrentUser() user: UserPayload) {
     return this.financeService.getGroups(user.id);
   }
 
   @Get('groups/:id')
-  getGroupDetail(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+  getGroupDetail(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.getGroupDetail(user.id, id);
   }
 
@@ -100,14 +99,14 @@ export class FinanceController {
    * All transactions for the group — both approved and pending.
    */
   @Get('groups/:id/transactions')
-  getGroupTransactions(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+  getGroupTransactions(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.getGroupTransactions(user.id, id);
   }
 
   @Post('groups/:id/members')
   @HttpCode(HttpStatus.OK)
   addGroupMember(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body('email') email: string,
   ) {
@@ -117,9 +116,9 @@ export class FinanceController {
   @Delete('groups/:id/members/:memberId')
   @HttpCode(HttpStatus.OK)
   removeGroupMember(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('memberId', ParseIntPipe) memberId: number,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
   ) {
     return this.financeService.removeGroupMember(user.id, id, memberId);
   }
@@ -127,7 +126,7 @@ export class FinanceController {
   @Patch('groups/:id')
   @HttpCode(HttpStatus.OK)
   updateGroup(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body('name') name: string,
   ) {
@@ -136,7 +135,7 @@ export class FinanceController {
 
   @Delete('groups/:id')
   @HttpCode(HttpStatus.OK)
-  deleteGroup(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+  deleteGroup(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.deleteGroup(user.id, id);
   }
 
@@ -146,14 +145,14 @@ export class FinanceController {
    * balance is always a number (never a string).
    */
   @Get('groups/:id/balances')
-  getGroupBalances(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+  getGroupBalances(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.getGroupBalances(user.id, id);
   }
 
   @Post('groups/:id/settle')
   @HttpCode(HttpStatus.OK)
   settleGroup(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body('amount') amount: number,
   ) {
@@ -164,19 +163,19 @@ export class FinanceController {
 
   @Post('budgets')
   @HttpCode(HttpStatus.CREATED)
-  createBudget(@CurrentUser() user: User, @Body() dto: CreateBudgetDto) {
+  createBudget(@CurrentUser() user: UserPayload, @Body() dto: CreateBudgetDto) {
     return this.financeService.createBudget(user.id, dto);
   }
 
   @Get('budgets')
-  getBudgets(@CurrentUser() user: User) {
+  getBudgets(@CurrentUser() user: UserPayload) {
     return this.financeService.getBudgets(user.id);
   }
 
   @Patch('budgets/:id')
   updateBudget(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBudgetDto,
   ) {
     return this.financeService.updateBudget(user.id, id, dto);
@@ -184,26 +183,26 @@ export class FinanceController {
 
   @Delete('budgets/:id')
   @HttpCode(HttpStatus.OK)
-  deleteBudget(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
+  deleteBudget(@CurrentUser() user: UserPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.financeService.deleteBudget(user.id, id);
   }
 
   // ─── Analytics ────────────────────────────────────────────────────────────
 
   @Get('analytics/summary')
-  getSpendingSummary(@CurrentUser() user: User) {
+  getSpendingSummary(@CurrentUser() user: UserPayload) {
     return this.financeService.getSpendingSummary(user.id);
   }
 
   @Get('analytics/categories')
-  getSpendingByCategories(@CurrentUser() user: User, @Query() query: AnalyticsQueryDto) {
+  getSpendingByCategories(@CurrentUser() user: UserPayload, @Query() query: AnalyticsQueryDto) {
     return this.financeService.getSpendingByCategories(user.id, query);
   }
 
   // ─── Accounts ─────────────────────────────────────────────────────────────
 
   @Get('accounts')
-  getAccounts(@CurrentUser() user: User) {
+  getAccounts(@CurrentUser() user: UserPayload) {
     return this.financeService.getAccounts(user.id);
   }
 }

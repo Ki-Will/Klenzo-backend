@@ -7,14 +7,14 @@ import {
   Body,
   Param,
   UseGuards,
-  ParseIntPipe,
+  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ProductivityService } from './productivity.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { UserPayload } from '../auth/jwt.strategy';
 import { CreateTaskDto, UpdateTaskDto } from '../dto/task.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -24,27 +24,27 @@ export class ProductivityController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createTask(@CurrentUser() user: User, @Body() dto: CreateTaskDto) {
+  createTask(@CurrentUser() user: UserPayload, @Body() dto: CreateTaskDto) {
     return this.productivityService.createTask(user.id, dto);
   }
 
   @Get()
-  getTasks(@CurrentUser() user: User) {
+  getTasks(@CurrentUser() user: UserPayload) {
     return this.productivityService.getTasks(user.id);
   }
 
   @Get(':id')
   getTask(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.productivityService.getTask(user.id, id);
   }
 
   @Patch(':id')
   updateTask(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTaskDto,
   ) {
     return this.productivityService.updateTask(user.id, id, dto);
@@ -53,8 +53,8 @@ export class ProductivityController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   deleteTask(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.productivityService.deleteTask(user.id, id);
   }

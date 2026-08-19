@@ -11,7 +11,6 @@ import {
   IsInt,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { TransactionType } from '../entities/transaction.entity';
 
 export class CreateTransactionDto {
   @IsNumber()
@@ -27,8 +26,8 @@ export class CreateTransactionDto {
   @IsOptional()
   category?: string;
 
-  @IsIn([TransactionType.INCOME, TransactionType.EXPENSE])
-  transactionType: TransactionType;
+  @IsIn(['INCOME', 'EXPENSE'])
+  transactionType: 'INCOME' | 'EXPENSE';
 
   @IsDateString()
   date: string;
@@ -38,10 +37,9 @@ export class CreateTransactionDto {
   @IsOptional()
   groupId?: string;
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  accountId?: number;
+  accountId?: string;
 
   /**
    * Approval state for split transactions.
@@ -49,23 +47,21 @@ export class CreateTransactionDto {
    * Split copies for other members start as 'pending'.
    * Defaults to 'approved' if omitted.
    */
-  @IsIn(['pending', 'approved'])
+  @IsIn(['PENDING', 'APPROVED'])
   @IsOptional()
-  status?: 'pending' | 'approved';
+  status?: 'PENDING' | 'APPROVED';
 
   /**
    * For split transactions: the id of the parent group expense.
    * null / omitted for the original transaction.
    */
-  @IsInt()
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  parentTransactionId?: number;
+  parentTransactionId?: string;
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  budgetId?: number;
+  budgetId?: string;
 }
 
 export class UpdateTransactionDto {
@@ -83,9 +79,9 @@ export class UpdateTransactionDto {
   @IsOptional()
   category?: string;
 
-  @IsIn([TransactionType.INCOME, TransactionType.EXPENSE])
+  @IsIn(['INCOME', 'EXPENSE'])
   @IsOptional()
-  transactionType?: TransactionType;
+  transactionType?: 'INCOME' | 'EXPENSE';
 
   @IsDateString()
   @IsOptional()
@@ -95,24 +91,21 @@ export class UpdateTransactionDto {
   @IsOptional()
   groupId?: string;
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  accountId?: number;
+  accountId?: string;
 
-  @IsIn(['pending', 'approved'])
+  @IsIn(['PENDING', 'APPROVED'])
   @IsOptional()
-  status?: 'pending' | 'approved';
+  status?: 'PENDING' | 'APPROVED';
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  parentTransactionId?: number;
+  parentTransactionId?: string;
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  @Type(() => Number)
-  budgetId?: number;
+  budgetId?: string;
 }
 
 export class CreateGroupDto {
@@ -144,9 +137,9 @@ export class CreateBudgetDto {
   @Type(() => Number)
   limitAmount: number;
 
-  @IsIn(['monthly', 'quarterly', 'yearly', 'custom'])
+  @IsIn(['MONTHLY', 'QUARTERLY', 'YEARLY', 'CUSTOM'])
   @IsOptional()
-  period?: string;
+  period?: 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'CUSTOM';
 
   @IsString()
   @IsOptional()
@@ -180,9 +173,9 @@ export class UpdateBudgetDto {
   @Type(() => Number)
   limitAmount?: number;
 
-  @IsIn(['monthly', 'quarterly', 'yearly', 'custom'])
+  @IsIn(['MONTHLY', 'QUARTERLY', 'YEARLY', 'CUSTOM'])
   @IsOptional()
-  period?: string;
+  period?: 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'CUSTOM';
 
   @IsString()
   @IsOptional()

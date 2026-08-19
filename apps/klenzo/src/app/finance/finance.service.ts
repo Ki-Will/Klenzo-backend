@@ -4,15 +4,9 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, MoreThanOrEqual, LessThanOrEqual, IsNull } from 'typeorm';
-import { Transaction, TransactionStatus, TransactionType } from '../entities/transaction.entity';
-import { Group, GroupMember } from '../entities/group.entity';
-import { Budget } from '../entities/budget.entity';
-import { Account } from '../entities/account.entity';
-import { User } from '../entities/user.entity';
+import { PrismaService } from '../prisma/prisma.service';
+import { TransactionStatus, TransactionType, NotificationType, NotificationCategory, BudgetPeriod } from '@prisma/client';
 import { NotificationService } from '../notification/notification.service';
-import { NotificationType, NotificationCategory } from '../entities/notification.entity';
 import { InsightService } from '../insight/insight.service';
 import {
   CreateTransactionDto,
@@ -26,57 +20,50 @@ import {
 @Injectable()
 export class FinanceService {
   constructor(
-    @InjectRepository(Transaction)
-    private readonly transactionRepo: Repository<Transaction>,
-    @InjectRepository(Group)
-    private readonly groupRepo: Repository<Group>,
-    @InjectRepository(GroupMember)
-    private readonly groupMemberRepo: Repository<GroupMember>,
-    @InjectRepository(Budget)
-    private readonly budgetRepo: Repository<Budget>,
-    @InjectRepository(Account)
-    private readonly accountRepo: Repository<Account>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
     private readonly insightService: InsightService,
   ) { }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
 
-  async createTransaction(userId: number, dto: CreateTransactionDto): Promise<Transaction> {
-    const transaction = this.transactionRepo.create({
-      userId,
-      amount: dto.amount,
-      description: dto.description ?? null,
-      category: dto.category ?? null,
-      transactionType: dto.transactionType,
-      date: new Date(dto.date),
-      groupId: dto.groupId ?? null,
-      accountId: dto.accountId ?? null,
-      status: (dto.status as TransactionStatus) ?? TransactionStatus.APPROVED,
-      parentTransactionId: dto.parentTransactionId ?? null,
+  async createTransaction(userId: string, dto: CreateTransactionDto) {
+    const saved = await this.prisma.transaction.create({
+      data: {
+        userId,
+        amount: dto.amount,
+        description: dto.description ?? null,
+        category: dto.category ?? null,
+        transactionType: dto.transactionType as TransactionType,
+        date: new Date(dto.date),
+        groupId: dto.groupId ?? null,
+        accountId: dto.accountId ?? null,
+        status: (dto.status as TransactionStatus) ?? TransactionStatus.APPROVED,
+        parentTransactionId: dto.parentTransactionId ?? null,
+      },
     });
-    const saved = await this.transactionRepo.save(transaction);
 
     // Update budget
-    if (saved.status === TransactionStatus.APPROVED && dto.transactionType === TransactionType.EXPENSE) {
-      let budget: Budget | null = null;
+    if (saved.status === TransactionStatus.APPROVED && dto.transactionType === 'EXPENSE') {
+      let budget = null;
       if (dto.budgetId) {
-        budget = await this.budgetRepo.findOne({ where: { id: dto.budgetId, userId } });
+        budget = await this.prisma.budget.findFirst({ where: { id: dto.budgetId, userId } });
       } else if (dto.category) {
-        budget = await this.budgetRepo.findOne({ where: { userId, category: dto.category } });
+        budget = await this.prisma.budget.findFirst({ where: { userId, category: dto.category } });
       }
 
       if (budget) {
-        budget.spent = Number(budget.spent) + Number(dto.amount);
-        await this.budgetRepo.save(budget);
+        const newSpent = Number(budget.spent) + Number(dto.amount);
+        await this.prisma.budget.update({
+          where: { id: budget.id },
+          data: { spent: newSpent },
+        });
 
-        if (Number(budget.spent) > Number(budget.limitAmount)) {
+        if (newSpent > Number(budget.limitAmount)) {
           this.notificationService.createNotification({
             userId,
             title: '⚠️ Budget Exceeded',
-            message: `You exceeded your "${budget.name}" budget of ${budget.limitAmount}. Spent: ${budget.spent}.`,
+            message: `You exceeded your "${budget.name}" budget of ${budget.limitAmount}. Spent: ${newSpent}.`,
             type: NotificationType.WARNING,
             category: NotificationCategory.TRANSACTION,
           }).catch(() => null);
@@ -88,41 +75,44 @@ export class FinanceService {
     return saved;
   }
 
-  async getTransactions(userId: number): Promise<Transaction[]> {
-    return this.transactionRepo.find({
+  async getTransactions(userId: string) {
+    return this.prisma.transaction.findMany({
       where: { userId, status: TransactionStatus.APPROVED },
-      order: { date: 'DESC' },
+      orderBy: { date: 'desc' },
     });
   }
 
-  async getTransaction(userId: number, transactionId: number): Promise<Transaction> {
-    const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
+  async getTransaction(userId: string, transactionId: string) {
+    const tx = await this.prisma.transaction.findUnique({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
     if (tx.userId !== userId) throw new ForbiddenException();
     return tx;
   }
 
-  async deleteTransaction(userId: number, transactionId: number): Promise<{ message: string }> {
-    const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
+  async deleteTransaction(userId: string, transactionId: string): Promise<{ message: string }> {
+    const tx = await this.prisma.transaction.findUnique({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
     if (tx.userId !== userId) throw new ForbiddenException();
 
     // If it was linked to a budget, decrease spent
     if (tx.budgetId && tx.status === TransactionStatus.APPROVED && tx.transactionType === TransactionType.EXPENSE) {
-      const budget = await this.budgetRepo.findOne({ where: { id: tx.budgetId } });
+      const budget = await this.prisma.budget.findUnique({ where: { id: tx.budgetId } });
       if (budget) {
-        budget.spent = Math.max(0, Number(budget.spent) - Number(tx.amount));
-        await this.budgetRepo.save(budget);
+        const newSpent = Math.max(0, Number(budget.spent) - Number(tx.amount));
+        await this.prisma.budget.update({
+          where: { id: budget.id },
+          data: { spent: newSpent },
+        });
       }
     }
 
-    await this.transactionRepo.delete(transactionId);
+    await this.prisma.transaction.delete({ where: { id: transactionId } });
     this.insightService.invalidateDashboard(userId).catch(() => null);
     return { message: 'Transaction deleted' };
   }
 
-  async updateTransaction(userId: number, transactionId: number, dto: UpdateTransactionDto): Promise<Transaction> {
-    const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
+  async updateTransaction(userId: string, transactionId: string, dto: UpdateTransactionDto) {
+    const tx = await this.prisma.transaction.findUnique({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
     if (tx.userId !== userId) throw new ForbiddenException();
 
@@ -130,38 +120,48 @@ export class FinanceService {
     const oldBudgetId = tx.budgetId;
     const wasApprovedExpense = tx.status === TransactionStatus.APPROVED && tx.transactionType === TransactionType.EXPENSE;
 
-    // Update fields
-    if (dto.amount !== undefined) tx.amount = dto.amount;
-    if (dto.description !== undefined) tx.description = dto.description;
-    if (dto.category !== undefined) tx.category = dto.category;
-    if (dto.transactionType !== undefined) tx.transactionType = dto.transactionType;
-    if (dto.date !== undefined) tx.date = new Date(dto.date);
-    if (dto.groupId !== undefined) tx.groupId = dto.groupId;
-    if (dto.accountId !== undefined) tx.accountId = dto.accountId;
-    if (dto.status !== undefined) tx.status = dto.status as TransactionStatus;
-    if (dto.parentTransactionId !== undefined) tx.parentTransactionId = dto.parentTransactionId;
-    if (dto.budgetId !== undefined) tx.budgetId = dto.budgetId;
+    // Update transaction
+    const saved = await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        amount: dto.amount ?? tx.amount,
+        description: dto.description ?? tx.description,
+        category: dto.category ?? tx.category,
+        transactionType: dto.transactionType ? (dto.transactionType as TransactionType) : tx.transactionType,
+        date: dto.date ? new Date(dto.date) : tx.date,
+        groupId: dto.groupId ?? tx.groupId,
+        accountId: dto.accountId ?? tx.accountId,
+        status: dto.status ? (dto.status as TransactionStatus) : tx.status,
+        parentTransactionId: dto.parentTransactionId ?? tx.parentTransactionId,
+        budgetId: dto.budgetId ?? tx.budgetId,
+      },
+    });
 
-    const saved = await this.transactionRepo.save(tx);
     const isApprovedExpense = saved.status === TransactionStatus.APPROVED && saved.transactionType === TransactionType.EXPENSE;
 
     // Re-calculate budgets
     if (wasApprovedExpense || isApprovedExpense) {
       // 1. Remove from old budget if changed
       if (wasApprovedExpense && oldBudgetId) {
-        const oldBudget = await this.budgetRepo.findOne({ where: { id: oldBudgetId } });
+        const oldBudget = await this.prisma.budget.findUnique({ where: { id: oldBudgetId } });
         if (oldBudget) {
-          oldBudget.spent = Math.max(0, Number(oldBudget.spent) - oldAmount);
-          await this.budgetRepo.save(oldBudget);
+          const newSpent = Math.max(0, Number(oldBudget.spent) - oldAmount);
+          await this.prisma.budget.update({
+            where: { id: oldBudget.id },
+            data: { spent: newSpent },
+          });
         }
       }
 
       // 2. Add to new budget
       if (isApprovedExpense && saved.budgetId) {
-        const newBudget = await this.budgetRepo.findOne({ where: { id: saved.budgetId } });
+        const newBudget = await this.prisma.budget.findUnique({ where: { id: saved.budgetId } });
         if (newBudget) {
-          newBudget.spent = Number(newBudget.spent) + Number(saved.amount);
-          await this.budgetRepo.save(newBudget);
+          const newSpent = Number(newBudget.spent) + Number(saved.amount);
+          await this.prisma.budget.update({
+            where: { id: newBudget.id },
+            data: { spent: newSpent },
+          });
         }
       }
     }
@@ -170,8 +170,8 @@ export class FinanceService {
     return saved;
   }
 
-  async approveTransaction(userId: number, transactionId: number): Promise<Transaction> {
-    const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
+  async approveTransaction(userId: string, transactionId: string) {
+    const tx = await this.prisma.transaction.findUnique({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
     if (tx.userId !== userId) {
       throw new ForbiddenException('You can only approve your own transactions');
@@ -180,19 +180,24 @@ export class FinanceService {
       throw new BadRequestException('Transaction is already approved');
     }
 
-    tx.status = TransactionStatus.APPROVED;
-    const saved = await this.transactionRepo.save(tx);
+    const saved = await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data: { status: TransactionStatus.APPROVED },
+    });
 
     if (tx.transactionType === TransactionType.EXPENSE) {
-      let budget: Budget | null = null;
+      let budget = null;
       if (tx.budgetId) {
-        budget = await this.budgetRepo.findOne({ where: { id: tx.budgetId, userId } });
+        budget = await this.prisma.budget.findFirst({ where: { id: tx.budgetId, userId } });
       } else if (tx.category) {
-        budget = await this.budgetRepo.findOne({ where: { userId, category: tx.category } });
+        budget = await this.prisma.budget.findFirst({ where: { userId, category: tx.category } });
       }
       if (budget) {
-        budget.spent = Number(budget.spent) + Number(tx.amount);
-        await this.budgetRepo.save(budget);
+        const newSpent = Number(budget.spent) + Number(tx.amount);
+        await this.prisma.budget.update({
+          where: { id: budget.id },
+          data: { spent: newSpent },
+        });
       }
     }
 
@@ -202,13 +207,13 @@ export class FinanceService {
 
   // ─── Groups ───────────────────────────────────────────────────────────────
 
-  async createGroup(userId: number, dto: CreateGroupDto): Promise<Group> {
-    const creator = await this.userRepository.findOne({ where: { id: userId } });
+  async createGroup(userId: string, dto: CreateGroupDto) {
+    const creator = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!creator) throw new NotFoundException('User not found');
 
-    const savedGroup = await this.groupRepo.save(
-      this.groupRepo.create({ name: dto.name, createdBy: userId }),
-    );
+    const savedGroup = await this.prisma.group.create({
+      data: { name: dto.name, createdBy: userId },
+    });
 
     const emails = new Set<string>([creator.email.toLowerCase()]);
     for (const email of dto.memberEmails ?? []) {
@@ -217,20 +222,21 @@ export class FinanceService {
 
     const members = await Promise.all(
       [...emails].map(async (email) => {
-        const user = await this.userRepository.findOne({ where: { email } });
+        const user = await this.prisma.user.findUnique({ where: { email } });
         if (!user) {
           throw new NotFoundException(
             `User "${email}" not found. They must register first, or add them later.`,
           );
         }
-        return this.groupMemberRepo.create({
-          email: user.email,
-          userId: user.id,
-          groupId: savedGroup.id,
+        return this.prisma.groupMember.create({
+          data: {
+            email: user.email,
+            userId: user.id,
+            groupId: savedGroup.id,
+          },
         });
       }),
     );
-    await this.groupMemberRepo.save(members);
 
     this.notificationService.createNotification({
       userId,
@@ -253,19 +259,22 @@ export class FinanceService {
       }
     }
 
-    return this.groupRepo.findOne({
+    return this.prisma.group.findUnique({
       where: { id: savedGroup.id },
-      relations: ['members'],
-    }) as Promise<Group>;
+      include: { members: true },
+    });
   }
 
-  async getGroups(userId: number) {
-    const groups = await this.groupRepo.find({
-      where: [
-        { createdBy: userId },
-        { members: { userId } }
-      ],
-      relations: ['members', 'transactions'],
+  async getGroups(userId: string) {
+    // Get groups where user is creator or member
+    const groups = await this.prisma.group.findMany({
+      where: {
+        OR: [
+          { createdBy: userId },
+          { members: { some: { userId } } },
+        ],
+      },
+      include: { members: true, transactions: true },
     });
 
     return groups.map((group) => {
@@ -283,16 +292,18 @@ export class FinanceService {
     });
   }
 
-  async updateGroup(userId: number, groupId: string, name: string): Promise<Group> {
-    const group = await this.groupRepo.findOne({
+  async updateGroup(userId: string, groupId: string, name: string) {
+    const group = await this.prisma.group.findUnique({
       where: { id: groupId },
-      relations: ['members'],
+      include: { members: true },
     });
     if (!group) throw new NotFoundException('Group not found');
     if (group.createdBy !== userId) throw new ForbiddenException();
 
-    group.name = name;
-    const saved = await this.groupRepo.save(group);
+    const saved = await this.prisma.group.update({
+      where: { id: groupId },
+      data: { name },
+    });
 
     for (const member of group.members) {
       if (member.userId) {
@@ -308,33 +319,39 @@ export class FinanceService {
     return saved;
   }
 
-  async getGroupDetail(userId: number, groupId: string): Promise<Group> {
-    const group = await this.groupRepo.findOne({
+  async getGroupDetail(userId: string, groupId: string) {
+    const group = await this.prisma.group.findUnique({
       where: { id: groupId },
-      relations: ['members', 'transactions'],
+      include: { members: true, transactions: true },
     });
     if (!group) throw new NotFoundException('Group not found');
     this.assertGroupAccess(group, userId);
     return group;
   }
 
-  async getGroupTransactions(userId: number, groupId: string): Promise<Transaction[]> {
-    const group = await this.groupRepo.findOne({ where: { id: groupId }, relations: ['members'] });
+  async getGroupTransactions(userId: string, groupId: string) {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      include: { members: true },
+    });
     if (!group) throw new NotFoundException('Group not found');
     this.assertGroupAccess(group, userId);
 
-    return this.transactionRepo.find({
+    return this.prisma.transaction.findMany({
       where: { groupId },
-      order: { date: 'DESC' },
+      orderBy: { date: 'desc' },
     });
   }
 
-  async addGroupMember(userId: number, groupId: string, email: string): Promise<Group> {
-    const group = await this.groupRepo.findOne({ where: { id: groupId }, relations: ['members'] });
+  async addGroupMember(userId: string, groupId: string, email: string) {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      include: { members: true },
+    });
     if (!group) throw new NotFoundException('Group not found');
     this.assertGroupAccess(group, userId);
 
-    const userToAdd = await this.userRepository.findOne({ where: { email } });
+    const userToAdd = await this.prisma.user.findUnique({ where: { email } });
     if (!userToAdd) {
       throw new NotFoundException(`User "${email}" not found.`);
     }
@@ -342,9 +359,9 @@ export class FinanceService {
       throw new BadRequestException(`"${email}" is already in this group.`);
     }
 
-    await this.groupMemberRepo.save(
-      this.groupMemberRepo.create({ email, userId: userToAdd.id, groupId }),
-    );
+    await this.prisma.groupMember.create({
+      data: { email, userId: userToAdd.id, groupId },
+    });
 
     this.notificationService.createNotification({
       userId: userToAdd.id,
@@ -354,18 +371,23 @@ export class FinanceService {
       category: NotificationCategory.GROUP,
     }).catch(() => null);
 
-    return this.groupRepo.findOne({ where: { id: groupId }, relations: ['members'] }) as Promise<Group>;
+    return this.prisma.group.findUnique({
+      where: { id: groupId },
+      include: { members: true },
+    });
   }
 
-  async removeGroupMember(userId: number, groupId: string, memberId: number): Promise<{ message: string }> {
-    const group = await this.groupRepo.findOne({ where: { id: groupId } });
+  async removeGroupMember(userId: string, groupId: string, memberId: string): Promise<{ message: string }> {
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundException('Group not found');
     if (group.createdBy !== userId) throw new ForbiddenException();
 
-    const member = await this.groupMemberRepo.findOne({ where: { id: memberId, groupId } });
+    const member = await this.prisma.groupMember.findFirst({
+      where: { id: memberId, groupId },
+    });
     if (!member) throw new NotFoundException('Member not found');
 
-    await this.groupMemberRepo.remove(member);
+    await this.prisma.groupMember.delete({ where: { id: memberId } });
     this.notificationService.createNotification({
       userId: member.userId,
       title: '👥 Removed from Group',
@@ -377,27 +399,27 @@ export class FinanceService {
     return { message: 'Member removed' };
   }
 
-  async deleteGroup(userId: number, groupId: string): Promise<{ message: string }> {
-    const group = await this.groupRepo.findOne({ where: { id: groupId } });
+  async deleteGroup(userId: string, groupId: string): Promise<{ message: string }> {
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
     if (!group) throw new NotFoundException('Group not found');
     if (group.createdBy !== userId) throw new ForbiddenException();
-    await this.groupRepo.remove(group);
+    await this.prisma.group.delete({ where: { id: groupId } });
     return { message: 'Group deleted' };
   }
 
-  async getGroupBalances(userId: number, groupId: string) {
-    const group = await this.groupRepo.findOne({
+  async getGroupBalances(userId: string, groupId: string) {
+    const group = await this.prisma.group.findUnique({
       where: { id: groupId },
-      relations: ['members', 'transactions'],
+      include: { members: true, transactions: true },
     });
     if (!group) throw new NotFoundException('Group not found');
     this.assertGroupAccess(group, userId);
 
     if (group.members.length === 0) return [];
-    const net: Record<number, { userId: number; name: string; balance: number }> = {};
+    const net: Record<string, { userId: string; name: string; balance: number }> = {};
 
     for (const m of group.members) {
-      const user = await this.userRepository.findOne({ where: { id: m.userId } });
+      const user = await this.prisma.user.findUnique({ where: { id: m.userId } });
       net[m.userId] = { userId: m.userId, name: user?.name ?? m.email, balance: 0 };
     }
 
@@ -420,13 +442,16 @@ export class FinanceService {
     }));
   }
 
-  async settleGroup(userId: number, groupId: string, amount: number): Promise<Transaction> {
-    const group = await this.groupRepo.findOne({ where: { id: groupId }, relations: ['members'] });
+  async settleGroup(userId: string, groupId: string, amount: number) {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      include: { members: true },
+    });
     if (!group) throw new NotFoundException('Group not found');
     this.assertGroupAccess(group, userId);
 
-    return this.transactionRepo.save(
-      this.transactionRepo.create({
+    return this.prisma.transaction.create({
+      data: {
         userId,
         groupId,
         amount,
@@ -435,17 +460,28 @@ export class FinanceService {
         category: 'settlement',
         date: new Date(),
         status: TransactionStatus.APPROVED,
-      }),
-    );
+      },
+    });
   }
 
   // ─── Budgets ──────────────────────────────────────────────────────────────
 
-  async createBudget(userId: number, dto: CreateBudgetDto): Promise<Budget> {
-    const budget = this.budgetRepo.create({ ...dto, userId });
-    if (!budget.period) budget.period = 'monthly';
-    const saved = await this.budgetRepo.save(budget);
-    
+  async createBudget(userId: string, dto: CreateBudgetDto) {
+    const period = (dto.period as BudgetPeriod) || BudgetPeriod.MONTHLY;
+    const saved = await this.prisma.budget.create({
+      data: {
+        userId,
+        name: dto.name,
+        category: dto.category,
+        limitAmount: dto.limitAmount,
+        period,
+        color: dto.color,
+        icon: dto.icon,
+        startDate: dto.startDate ? new Date(dto.startDate) : null,
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+      },
+    });
+
     this.notificationService.createNotification({
       userId,
       title: '📊 Budget Created',
@@ -456,66 +492,89 @@ export class FinanceService {
     return saved;
   }
 
-  async getBudgets(userId: number): Promise<Budget[]> {
-    return this.budgetRepo.find({ where: { userId } });
+  async getBudgets(userId: string) {
+    return this.prisma.budget.findMany({ where: { userId } });
   }
 
-  async updateBudget(userId: number, budgetId: number, dto: UpdateBudgetDto): Promise<Budget> {
-    const budget = await this.budgetRepo.findOne({ where: { id: budgetId, userId } });
+  async updateBudget(userId: string, budgetId: string, dto: UpdateBudgetDto) {
+    const budget = await this.prisma.budget.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new NotFoundException('Budget not found');
-    Object.assign(budget, dto);
-    const saved = await this.budgetRepo.save(budget);
+    
+    const updateData: any = {};
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.category !== undefined) updateData.category = dto.category;
+    if (dto.limitAmount !== undefined) updateData.limitAmount = dto.limitAmount;
+    if (dto.period !== undefined) updateData.period = dto.period as BudgetPeriod;
+    if (dto.color !== undefined) updateData.color = dto.color;
+    if (dto.icon !== undefined) updateData.icon = dto.icon;
+    if (dto.startDate !== undefined) updateData.startDate = new Date(dto.startDate);
+    if (dto.endDate !== undefined) updateData.endDate = new Date(dto.endDate);
+
+    const saved = await this.prisma.budget.update({
+      where: { id: budgetId },
+      data: updateData,
+    });
     await this.recalculateBudgetSpent(userId, budgetId);
     return saved;
   }
 
-  async deleteBudget(userId: number, budgetId: number): Promise<{ message: string }> {
-    const budget = await this.budgetRepo.findOne({ where: { id: budgetId, userId } });
+  async deleteBudget(userId: string, budgetId: string): Promise<{ message: string }> {
+    const budget = await this.prisma.budget.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new NotFoundException('Budget not found');
-    
+
     // Unlink transactions
-    await this.transactionRepo.update({ budgetId }, { budgetId: null });
-    
-    await this.budgetRepo.remove(budget);
+    await this.prisma.transaction.updateMany({
+      where: { budgetId },
+      data: { budgetId: null },
+    });
+
+    await this.prisma.budget.delete({ where: { id: budgetId } });
     return { message: 'Budget deleted' };
   }
 
-  async recalculateBudgetSpent(userId: number, budgetId: number): Promise<void> {
-    const budget = await this.budgetRepo.findOne({ where: { id: budgetId, userId } });
+  async recalculateBudgetSpent(userId: string, budgetId: string): Promise<void> {
+    const budget = await this.prisma.budget.findFirst({ where: { id: budgetId, userId } });
     if (!budget) return;
 
     // Sum transactions explicitly linked to this budget
-    const linkedTx = await this.transactionRepo.find({ 
-      where: { budgetId, userId, status: TransactionStatus.APPROVED, transactionType: TransactionType.EXPENSE } 
+    const linkedTx = await this.prisma.transaction.findMany({
+      where: {
+        budgetId,
+        userId,
+        status: TransactionStatus.APPROVED,
+        transactionType: TransactionType.EXPENSE,
+      },
     });
     let total = linkedTx.reduce((s, t) => s + Number(t.amount), 0);
 
     // If budget has a category, also include transactions with that category that AREN'T linked to another budget
     if (budget.category) {
-      const catTx = await this.transactionRepo.find({
-        where: { 
-          category: budget.category, 
-          userId, 
-          status: TransactionStatus.APPROVED, 
+      const catTx = await this.prisma.transaction.findMany({
+        where: {
+          category: budget.category,
+          userId,
+          status: TransactionStatus.APPROVED,
           transactionType: TransactionType.EXPENSE,
-          budgetId: IsNull() // Only if not already linked manually to another budget
-        }
+          budgetId: null,
+        },
       });
       total += catTx.reduce((s, t) => s + Number(t.amount), 0);
     }
 
-    budget.spent = Math.round(total * 100) / 100;
-    await this.budgetRepo.save(budget);
+    await this.prisma.budget.update({
+      where: { id: budgetId },
+      data: { spent: Math.round(total * 100) / 100 },
+    });
   }
 
   // ─── Analytics ────────────────────────────────────────────────────────────
 
-  async getSpendingSummary(userId: number) {
+  async getSpendingSummary(userId: string) {
     const [expenses, income] = await Promise.all([
-      this.transactionRepo.find({
+      this.prisma.transaction.findMany({
         where: { userId, transactionType: TransactionType.EXPENSE, status: TransactionStatus.APPROVED },
       }),
-      this.transactionRepo.find({
+      this.prisma.transaction.findMany({
         where: { userId, transactionType: TransactionType.INCOME, status: TransactionStatus.APPROVED },
       }),
     ]);
@@ -551,17 +610,21 @@ export class FinanceService {
     };
   }
 
-  async getSpendingByCategories(userId: number, query: AnalyticsQueryDto) {
+  async getSpendingByCategories(userId: string, query: AnalyticsQueryDto) {
     const where: any = {
       userId,
       transactionType: TransactionType.EXPENSE,
       status: TransactionStatus.APPROVED,
     };
-    if (query.from && query.to) where.date = Between(new Date(query.from), new Date(query.to));
-    else if (query.from) where.date = MoreThanOrEqual(new Date(query.from));
-    else if (query.to) where.date = LessThanOrEqual(new Date(query.to));
+    if (query.from && query.to) {
+      where.date = { gte: new Date(query.from), lte: new Date(query.to) };
+    } else if (query.from) {
+      where.date = { gte: new Date(query.from) };
+    } else if (query.to) {
+      where.date = { lte: new Date(query.to) };
+    }
 
-    const transactions = await this.transactionRepo.find({ where });
+    const transactions = await this.prisma.transaction.findMany({ where });
     const total = transactions.reduce((s, t) => s + Number(t.amount), 0);
 
     const map: Record<string, { amount: number; count: number }> = {};
@@ -582,13 +645,13 @@ export class FinanceService {
       .sort((a, b) => b.amount - a.amount);
   }
 
-  async getAccounts(userId: number): Promise<Account[]> {
-    return this.accountRepo.find({ where: { userId } });
+  async getAccounts(userId: string) {
+    return this.prisma.account.findMany({ where: { userId } });
   }
 
-  private assertGroupAccess(group: Group, userId: number): void {
+  private assertGroupAccess(group: { createdBy: string; members: { userId: string }[] }, userId: string): void {
     const isCreator = group.createdBy === userId;
-    const isMember = group.members?.some((member: GroupMember) => member.userId === userId);
+    const isMember = group.members?.some((member) => member.userId === userId);
     if (!isCreator && !isMember) throw new ForbiddenException();
   }
 }

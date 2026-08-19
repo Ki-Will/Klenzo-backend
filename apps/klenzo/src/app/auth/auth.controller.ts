@@ -20,7 +20,7 @@ import { AuthService } from './auth.service';
 import { R2Service } from '../storage/r2.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { UserPayload } from './jwt.strategy';
 
 import {
   RegisterDto,
@@ -31,7 +31,6 @@ import {
   ChangePasswordDto,
 } from '../dto/auth.dto';
 
-import { Multer } from 'multer';
 /**
  * COOKIE CONFIG
  *
@@ -177,7 +176,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.authService.logout(user.id);
@@ -210,14 +209,14 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
-  getProfile(@CurrentUser() user: User) {
+  getProfile(@CurrentUser() user: UserPayload) {
     return this.authService.getProfile(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('profile')
   @HttpCode(HttpStatus.OK)
-  updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
+  updateProfile(@CurrentUser() user: UserPayload, @Body() dto: UpdateProfileDto) {
     return this.authService.updateProfile(user.id, dto);
   }
 
@@ -228,8 +227,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
   async uploadAvatar(
-    @CurrentUser() user: User,
-    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: UserPayload,
+    @UploadedFile() file: any,
   ) {
     if (!file) {
       throw new UnauthorizedException('File is required');
@@ -247,7 +246,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
+  changePassword(@CurrentUser() user: UserPayload, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(
       user.id,
       dto.currentPassword,
@@ -259,14 +258,14 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('sessions')
-  getSessions(@CurrentUser() user: User) {
+  getSessions(@CurrentUser() user: UserPayload) {
     return this.authService.getSessions(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('sessions/:id/revoke')
   @HttpCode(HttpStatus.OK)
-  revokeSession(@CurrentUser() user: User, @Param('id') sessionId: string) {
+  revokeSession(@CurrentUser() user: UserPayload, @Param('id') sessionId: string) {
     return this.authService.revokeSession(user.id, sessionId);
   }
 }
