@@ -5,16 +5,15 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { User } from '../entities/user.entity';
 import { RegisterDto, LoginDto, UpdateProfileDto } from '../dto/auth.dto';
 import { JwtPayload } from './jwt.strategy';
 import { NotificationService } from '../notification/notification.service';
 import { RedisService } from '../redis/redis.service';
+import { Role } from '@prisma/client';
 
 const MAX_FAILED_ATTEMPTS = 5;
 
@@ -29,11 +28,10 @@ interface Session {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private sessions = new Map<number, Session[]>();
+  private sessions = new Map<string, Session[]>();
 
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly notificationService: NotificationService,
     private readonly redis: RedisService,
@@ -44,14 +42,15 @@ export class AuthService {
   // separate login call after registration.
 
   async register(dto: RegisterDto, device?: string) {
-    const existing = await this.userRepository.findOne({
+    const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
     if (existing) throw new ConflictException('Email already in use');
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const user = this.userRepository.create({ email: dto.email, passwordHash });
-    const saved = await this.userRepository.save(user);
+    const saved = await this.prisma.user.create({
+      data: { email: dto.email, passwordHash },
+    });
 
     this.notificationService
       .sendWelcomeEmail(saved.email)
@@ -76,7 +75,7 @@ export class AuthService {
   // immediately after login (fixes race condition / 401 on first request).
 
   async login(dto: LoginDto, device?: string) {
-    const user = await this.userRepository.findOne({
+    const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
@@ -92,26 +91,32 @@ export class AuthService {
     console.log('FAILED ATTEMPTS:', user.failedLoginAttempts);
     console.log('HASH EXISTS:', !!user.passwordHash);
 
-    // const match = await bcrypt.compare(dto.password, user.passwordHash);
-
     const match = await bcrypt.compare(dto.password, user.passwordHash);
     console.log('PASSWORD MATCH:', match);
     if (!match) {
-      user.failedLoginAttempts += 1;
-      if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-        user.isActive = false;
+      const newFailedAttempts = user.failedLoginAttempts + 1;
+      if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { isActive: false, failedLoginAttempts: newFailedAttempts },
+        });
         this.logger.warn(`Account locked: ${user.email}`);
         this.notificationService
           .sendAccountLockedEmail(user.email)
           .catch((err) => this.logger.error('Lock email failed', err?.stack));
+      } else {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { failedLoginAttempts: newFailedAttempts },
+        });
       }
-      await this.userRepository.save(user);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    user.failedLoginAttempts = 0;
-    user.lastLogin = new Date();
-    await this.userRepository.save(user);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginAttempts: 0, lastLogin: new Date() },
+    });
 
     this.trackSession(user.id, device || 'Unknown device');
 
@@ -133,7 +138,7 @@ export class AuthService {
       .createHash('sha256')
       .update(refreshToken)
       .digest('hex');
-    const user = await this.userRepository.findOne({
+    const user = await this.prisma.user.findFirst({
       where: { refreshToken: hashed },
     });
 
@@ -154,10 +159,10 @@ export class AuthService {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
 
-  async logout(userId: number): Promise<void> {
-    await this.userRepository.update(userId, {
-      refreshToken: null as any,
-      refreshTokenExpires: null as any,
+  async logout(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: null, refreshTokenExpires: null },
     });
     this.sessions.delete(userId);
     // Evict cached profile so the next request re-validates from DB
@@ -167,7 +172,7 @@ export class AuthService {
   // ─── Forgot / Reset password ──────────────────────────────────────────────
 
   async forgotPassword(email: string): Promise<{ message: string }> {
-    const user = await this.userRepository.findOne({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email } });
     // Always return the same message to avoid email enumeration
     if (!user)
       return { message: 'If that email exists, a reset link has been sent' };
@@ -180,9 +185,9 @@ export class AuthService {
     const expires = new Date();
     expires.setHours(expires.getHours() + 1);
 
-    await this.userRepository.update(user.id, {
-      passwordResetToken: hashedToken,
-      passwordResetExpires: expires,
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: hashedToken, passwordResetExpires: expires },
     });
 
     this.notificationService
@@ -197,7 +202,7 @@ export class AuthService {
     newPassword: string,
   ): Promise<{ message: string }> {
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    const user = await this.userRepository.findOne({
+    const user = await this.prisma.user.findFirst({
       where: { passwordResetToken: hashedToken },
     });
 
@@ -212,12 +217,15 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.userRepository.update(user.id, {
-      passwordHash,
-      passwordResetToken: null as any,
-      passwordResetExpires: null as any,
-      failedLoginAttempts: 0,
-      isActive: true,
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        failedLoginAttempts: 0,
+        isActive: true,
+      },
     });
 
     return { message: 'Password reset successfully' };
@@ -225,24 +233,24 @@ export class AuthService {
 
   // ─── Profile ──────────────────────────────────────────────────────────────
 
-  async getProfile(userId: number) {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     return this.safeUser(user);
   }
 
-  async updateProfile(userId: number, dto: UpdateProfileDto) {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     if (dto.email && dto.email !== user.email) {
-      const conflict = await this.userRepository.findOne({
+      const conflict = await this.prisma.user.findUnique({
         where: { email: dto.email },
       });
       if (conflict) throw new ConflictException('Email already in use');
     }
 
-    const updates: Partial<User> = {};
+    const updates: any = {};
     if (dto.email !== undefined) updates.email = dto.email;
     if (dto.name !== undefined) updates.name = dto.name;
     if (dto.phone !== undefined) updates.phone = dto.phone;
@@ -253,18 +261,21 @@ export class AuthService {
       updates.avatar = dto.avatar;
     }
 
-    await this.userRepository.update(userId, updates);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: updates,
+    });
     // Evict cached profile so the next JWT validation picks up the new data
     await this.redis.del(RedisService.keys.userProfile(userId));
     return this.getProfile(userId);
   }
 
   async changePassword(
-    userId: number,
+    userId: string,
     currentPassword: string,
     newPassword: string,
   ): Promise<{ success: boolean }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     const match = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -273,14 +284,17 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.userRepository.update(userId, { passwordHash });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
     await this.redis.del(RedisService.keys.userProfile(userId));
     return { success: true };
   }
 
   // ─── Sessions ─────────────────────────────────────────────────────────────
 
-  async getSessions(userId: number) {
+  async getSessions(userId: string) {
     const userSessions = this.sessions.get(userId) || [];
     return userSessions.map((s, idx) => ({
       id: s.id,
@@ -292,7 +306,7 @@ export class AuthService {
   }
 
   async revokeSession(
-    userId: number,
+    userId: string,
     sessionId: string,
   ): Promise<{ success: boolean }> {
     const existing = this.sessions.get(userId) || [];
@@ -306,7 +320,18 @@ export class AuthService {
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   /** Strip sensitive fields before returning user to client */
-  private safeUser(user: User) {
+  private safeUser(user: {
+    id: string;
+    email: string;
+    name: string | null;
+    phone: string | null;
+    avatar: string | null;
+    role: Role;
+    isActive: boolean;
+    lastLogin: Date | null;
+    notificationSettings: any;
+    createdAt: Date;
+  }) {
     return {
       id: user.id,
       email: user.email,
@@ -321,7 +346,7 @@ export class AuthService {
     };
   }
 
-  private trackSession(userId: number, device: string) {
+  private trackSession(userId: string, device: string) {
     const session: Session = {
       id: crypto.randomUUID(),
       device,
@@ -334,14 +359,14 @@ export class AuthService {
     this.sessions.set(userId, updated);
   }
 
-  private async generateRefreshToken(userId: number): Promise<string> {
+  private async generateRefreshToken(userId: string): Promise<string> {
     const token = crypto.randomBytes(32).toString('hex');
     const hashed = crypto.createHash('sha256').update(token).digest('hex');
     const expires = new Date();
     expires.setDate(expires.getDate() + 7);
-    await this.userRepository.update(userId, {
-      refreshToken: hashed,
-      refreshTokenExpires: expires,
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: hashed, refreshTokenExpires: expires },
     });
     return token;
   }

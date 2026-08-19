@@ -5,26 +5,15 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
-import { User } from '../entities/user.entity';
-import { Task } from '../entities/task.entity';
-import { Habit } from '../entities/habit.entity';
-import { Transaction, TransactionType } from '../entities/transaction.entity';
+import { PrismaService } from '../prisma/prisma.service';
+import { TransactionType, Role } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    @InjectRepository(Task)
-    private readonly taskRepository: Repository<Task>,
-    @InjectRepository(Habit)
-    private readonly habitRepository: Repository<Habit>,
-    @InjectRepository(Transaction)
-    private readonly transactionRepository: Repository<Transaction>,
+    private readonly prisma: PrismaService,
   ) {}
 
   // ─── Platform Statistics ──────────────────────────────────────────────────
@@ -35,23 +24,22 @@ export class AdminService {
       activeUsers,
       totalTransactions,
     ] = await Promise.all([
-      this.userRepository.count(),
-      this.userRepository.count({ where: { isActive: true } }),
-      this.transactionRepository.count(),
+      this.prisma.user.count(),
+      this.prisma.user.count({ where: { isActive: true } }),
+      this.prisma.transaction.count(),
     ]);
 
     // Transaction volume
-    const volumeResult = await this.transactionRepository
-      .createQueryBuilder('tx')
-      .select('COALESCE(SUM(tx.amount), 0)', 'volume')
-      .where('tx.transactionType = :type', { type: TransactionType.EXPENSE })
-      .getRawOne();
-    const transactionVolume = Math.round(Number(volumeResult?.volume || 0));
+    const volumeResult = await this.prisma.transaction.aggregate({
+      where: { transactionType: TransactionType.EXPENSE },
+      _sum: { amount: true },
+    });
+    const transactionVolume = Math.round(Number(volumeResult._sum.amount || 0));
 
     // Active sessions (users logged in last 15 min)
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const activeSessions = await this.userRepository.count({
-      where: { lastLogin: MoreThan(fifteenMinutesAgo) },
+    const activeSessions = await this.prisma.user.count({
+      where: { lastLogin: { gte: fifteenMinutesAgo } },
     });
 
     // User growth (last 30 days vs previous 30)
@@ -61,10 +49,8 @@ export class AdminService {
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
     const [lastMonthUsers, prevPeriodUsers] = await Promise.all([
-      this.userRepository.count({ where: { createdAt: MoreThan(thirtyDaysAgo) } }),
-      this.userRepository.count({
-        where: { createdAt: MoreThan(sixtyDaysAgo) },
-      }),
+      this.prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      this.prisma.user.count({ where: { createdAt: { gte: sixtyDaysAgo } } }),
     ]);
     const prevCount = prevPeriodUsers - lastMonthUsers;
     const userGrowth = prevCount > 0
@@ -82,13 +68,14 @@ export class AdminService {
       const end = new Date(start);
       end.setMonth(end.getMonth() + 1);
 
-      const result = await this.transactionRepository
-        .createQueryBuilder('tx')
-        .select('COALESCE(SUM(tx.amount), 0)', 'monthVolume')
-        .where('tx.date >= :start AND tx.date < :end', { start, end })
-        .andWhere('tx.transactionType = :type', { type: TransactionType.EXPENSE })
-        .getRawOne();
-      monthlyRevenue.push(Math.round(Number(result?.monthVolume || 0)));
+      const result = await this.prisma.transaction.aggregate({
+        where: {
+          date: { gte: start, lt: end },
+          transactionType: TransactionType.EXPENSE,
+        },
+        _sum: { amount: true },
+      });
+      monthlyRevenue.push(Math.round(Number(result._sum.amount || 0)));
     }
 
     return {
@@ -115,44 +102,47 @@ export class AdminService {
     const limit = Math.min(query.limit || 50, 100);
     const skip = (page - 1) * limit;
 
-    const qb = this.userRepository.createQueryBuilder('user');
-
+    const where: any = {};
     if (query.search) {
-      qb.andWhere('user.email ILIKE :search OR user.name ILIKE :search', {
-        search: `%${query.search}%`,
-      });
+      where.OR = [
+        { email: { contains: query.search, mode: 'insensitive' } },
+        { name: { contains: query.search, mode: 'insensitive' } },
+      ];
     }
 
-    qb.select([
-      'user.id',
-      'user.email',
-      'user.name',
-      'user.role',
-      'user.isActive',
-      'user.createdAt',
-      'user.lastLogin',
-    ])
-      .orderBy('user.createdAt', 'DESC')
-      .skip(skip)
-      .take(limit);
-
-    const [users, total] = await qb.getManyAndCount();
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          lastLogin: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
     // Enrich each user with transaction stats
     const enrichedUsers = await Promise.all(
       users.map(async (user) => {
-        const txCount = await this.transactionRepository.count({
+        const txCount = await this.prisma.transaction.count({
           where: { userId: user.id },
         });
-        const volumeResult = await this.transactionRepository
-          .createQueryBuilder('tx')
-          .select('COALESCE(SUM(tx.amount), 0)', 'volume')
-          .where('tx.userId = :userId', { userId: user.id })
-          .getRawOne();
+        const volumeResult = await this.prisma.transaction.aggregate({
+          where: { userId: user.id },
+          _sum: { amount: true },
+        });
         return {
           ...user,
           transactionCount: txCount,
-          totalVolume: Math.round(Number(volumeResult?.volume || 0)),
+          totalVolume: Math.round(Number(volumeResult._sum.amount || 0)),
         };
       }),
     );
@@ -163,57 +153,78 @@ export class AdminService {
     };
   }
 
-  async getUserById(userId: number) {
-    const user = await this.userRepository.findOne({
+  async getUserById(userId: string) {
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: [
-        'id', 'email', 'name', 'role', 'isActive',
-        'createdAt', 'updatedAt', 'lastLogin', 'failedLoginAttempts',
-        'phone', 'avatar',
-      ],
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        lastLogin: true,
+        failedLoginAttempts: true,
+        phone: true,
+        avatar: true,
+      },
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
-  async toggleUserActive(userId: number, active: boolean): Promise<{ success: boolean }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async toggleUserActive(userId: string, active: boolean): Promise<{ success: boolean }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    await this.userRepository.update(userId, { isActive: active });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: active },
+    });
     return { success: true };
   }
 
-  async deleteUser(userId: number, currentUserId: number): Promise<{ success: boolean }> {
+  async deleteUser(userId: string, currentUserId: string): Promise<{ success: boolean }> {
     if (userId === currentUserId) {
       throw new BadRequestException('Cannot delete yourself');
     }
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    if (user.role === 'superadmin') {
+    if (user.role === Role.SUPERADMIN) {
       throw new ForbiddenException('Cannot delete superadmin users');
     }
-    await this.userRepository.remove(user);
+    await this.prisma.user.delete({ where: { id: userId } });
     return { success: true };
   }
 
   // ─── Admin Management ─────────────────────────────────────────────────────
 
   async getAdmins() {
-    return this.userRepository.find({
-      where: [{ role: 'admin' }, { role: 'superadmin' }],
-      select: ['id', 'email', 'name', 'role', 'isActive', 'lastLogin', 'createdAt'],
-      order: { createdAt: 'DESC' },
+    return this.prisma.user.findMany({
+      where: {
+        OR: [{ role: Role.ADMIN }, { role: Role.SUPERADMIN }],
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        lastLogin: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
   async createAdmin(
     dto: { email: string; password: string; name: string; role: 'admin' | 'superadmin' },
-    currentAdmin: User,
+    currentAdmin: { id: string; role: Role },
   ) {
-    const existing = await this.userRepository.findOne({ where: { email: dto.email } });
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 
-    if (dto.role === 'superadmin' && currentAdmin.role !== 'superadmin') {
+    if (dto.role === 'superadmin' && currentAdmin.role !== Role.SUPERADMIN) {
       throw new ForbiddenException('Only superadmins can create superadmins');
     }
     if (!['admin', 'superadmin'].includes(dto.role)) {
@@ -223,14 +234,15 @@ export class AdminService {
     const bcrypt = await import('bcrypt');
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    const admin = this.userRepository.create({
-      email: dto.email,
-      passwordHash,
-      name: dto.name,
-      role: dto.role,
-      isActive: true,
+    const saved = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        passwordHash,
+        name: dto.name,
+        role: dto.role === 'superadmin' ? Role.SUPERADMIN : Role.ADMIN,
+        isActive: true,
+      },
     });
-    const saved = await this.userRepository.save(admin);
 
     return {
       id: saved.id,
@@ -242,23 +254,23 @@ export class AdminService {
     };
   }
 
-  async getAllActiveUsers(): Promise<{ id: number; email: string }[]> {
-    return this.userRepository.find({
+  async getAllActiveUsers(): Promise<{ id: string; email: string }[]> {
+    return this.prisma.user.findMany({
       where: { isActive: true },
-      select: ['id', 'email'],
+      select: { id: true, email: true },
     });
   }
 
-  async deleteAdmin(adminId: number, currentAdmin: User): Promise<{ success: boolean }> {
+  async deleteAdmin(adminId: string, currentAdmin: { id: string; role: Role }): Promise<{ success: boolean }> {
     if (adminId === currentAdmin.id) {
       throw new BadRequestException('Cannot delete yourself');
     }
-    const admin = await this.userRepository.findOne({ where: { id: adminId } });
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
     if (!admin) throw new NotFoundException('Admin not found');
-    if (admin.role === 'superadmin') {
+    if (admin.role === Role.SUPERADMIN) {
       throw new ForbiddenException('Cannot delete superadmin users');
     }
-    await this.userRepository.remove(admin);
+    await this.prisma.user.delete({ where: { id: adminId } });
     return { success: true };
   }
 }

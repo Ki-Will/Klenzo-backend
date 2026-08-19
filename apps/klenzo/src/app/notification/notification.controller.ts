@@ -4,14 +4,14 @@ import {
   Post,
   Param,
   UseGuards,
-  ParseIntPipe,
+  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { UserPayload } from '../auth/jwt.strategy';
 
 // ── /api/notifications ────────────────────────────────────────────────────────
 @Controller('notifications')
@@ -29,7 +29,7 @@ export class NotificationController {
    */
   @UseGuards(JwtAuthGuard)
   @Get()
-  getNotifications(@CurrentUser() user: User) {
+  getNotifications(@CurrentUser() user: UserPayload) {
     return this.notificationService.getNotifications(user.id);
   }
 
@@ -37,7 +37,7 @@ export class NotificationController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/read')
   @HttpCode(HttpStatus.OK)
-  markAsRead(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  markAsRead(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: UserPayload) {
     return this.notificationService.markAsRead(id, user.id);
   }
 
@@ -45,7 +45,7 @@ export class NotificationController {
   @UseGuards(JwtAuthGuard)
   @Post('read-all')
   @HttpCode(HttpStatus.OK)
-  markAllAsRead(@CurrentUser() user: User) {
+  markAllAsRead(@CurrentUser() user: UserPayload) {
     return this.notificationService.markAllAsRead(user.id);
   }
 
@@ -53,7 +53,7 @@ export class NotificationController {
   @UseGuards(JwtAuthGuard)
   @Post(':id/dismiss')
   @HttpCode(HttpStatus.OK)
-  dismiss(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  dismiss(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: UserPayload) {
     return this.notificationService.dismiss(id, user.id);
   }
 }

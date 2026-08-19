@@ -7,7 +7,7 @@ import {
 import { InsightService } from './insight.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { UserPayload } from '../auth/jwt.strategy';
 import { TrendsQueryDto } from '../dto/insight.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -16,13 +16,13 @@ export class InsightController {
   constructor(private readonly insightService: InsightService) {}
 
   @Get('dashboard')
-  getDashboard(@CurrentUser() user: User) {
+  getDashboard(@CurrentUser() user: UserPayload) {
     return this.insightService.getDashboard(user.id);
   }
 
   @Get('productivity/trends')
   getProductivityTrends(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Query() query: TrendsQueryDto,
   ) {
     return this.insightService.getProductivityTrends(user.id, query.days);
@@ -30,7 +30,7 @@ export class InsightController {
 
   @Get('finance/trends')
   getSpendingTrends(
-    @CurrentUser() user: User,
+    @CurrentUser() user: UserPayload,
     @Query() query: TrendsQueryDto,
   ) {
     return this.insightService.getSpendingTrends(user.id, query.days);

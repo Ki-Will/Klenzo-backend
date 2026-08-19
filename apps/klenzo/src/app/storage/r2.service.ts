@@ -79,7 +79,7 @@ export class R2Service implements OnModuleInit {
   }
 
   async uploadFile(
-    file: Express.Multer.File,
+    file: any,
     folder: string = 'klenzo',
   ): Promise<string> {
     const fileExtension = file.originalname.split('.').pop() || 'png';

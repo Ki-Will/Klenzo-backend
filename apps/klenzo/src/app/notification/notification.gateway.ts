@@ -12,7 +12,7 @@ import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 interface AuthenticatedSocket extends Socket {
-  userId?: number;
+  userId?: string;
   userEmail?: string;
 }
 
@@ -29,7 +29,7 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
 
   private readonly logger = new Logger(NotificationGateway.name);
   // Map userId -> Set of socket IDs
-  private userSockets: Map<number, Set<string>> = new Map();
+  private userSockets: Map<string, Set<string>> = new Map();
 
   constructor(private readonly jwtService: JwtService) {}
 
@@ -77,7 +77,7 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
    * Send a notification to a specific user via WebSocket.
    * If the user is connected, they receive it instantly.
    */
-  sendToUser(userId: number, event: string, data: unknown): void {
+  sendToUser(userId: string, event: string, data: unknown): void {
     const sockets = this.userSockets.get(userId);
     if (sockets && sockets.size > 0) {
       // Send to all sockets of this user (multiple tabs/devices)
@@ -99,7 +99,7 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
   @SubscribeMessage('markAsRead')
   handleMarkAsRead(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { notificationId: number },
+    @MessageBody() data: { notificationId: string },
   ): void {
     // Forward to service via callback — handled in NotificationController
     this.logger.debug(`Client ${client.id} marks ${data.notificationId} as read`);

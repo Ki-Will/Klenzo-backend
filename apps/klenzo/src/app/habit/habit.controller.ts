@@ -7,14 +7,14 @@ import {
   Body,
   Param,
   UseGuards,
-  ParseIntPipe,
+  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { HabitService } from './habit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User } from '../entities/user.entity';
+import { UserPayload } from '../auth/jwt.strategy';
 import { CreateHabitDto, UpdateHabitDto } from '../dto/habit.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -24,35 +24,35 @@ export class HabitController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createHabit(@CurrentUser() user: User, @Body() dto: CreateHabitDto) {
+  createHabit(@CurrentUser() user: UserPayload, @Body() dto: CreateHabitDto) {
     return this.habitService.createHabit(user.id, dto);
   }
 
   @Get()
-  getHabits(@CurrentUser() user: User) {
+  getHabits(@CurrentUser() user: UserPayload) {
     return this.habitService.getHabits(user.id);
   }
 
   @Get(':id')
   getHabit(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.habitService.getHabit(user.id, id);
   }
 
   @Get(':id/stats')
   getHabitStats(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.habitService.getHabitStats(user.id, id);
   }
 
   @Patch(':id')
   updateHabit(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateHabitDto,
   ) {
     return this.habitService.updateHabit(user.id, id, dto);
@@ -61,8 +61,8 @@ export class HabitController {
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
   completeHabit(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.habitService.completeHabit(user.id, id);
   }
@@ -70,8 +70,8 @@ export class HabitController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   deleteHabit(
-    @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: UserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.habitService.deleteHabit(user.id, id);
   }

@@ -4,39 +4,35 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Habit, HabitLog } from '../entities/habit.entity';
+import { PrismaService } from '../prisma/prisma.service';
+import { HabitFrequency, NotificationType } from '@prisma/client';
 import { CreateHabitDto, UpdateHabitDto } from '../dto/habit.dto';
 import { NotificationService } from '../notification/notification.service';
-import { NotificationType } from '../entities/notification.entity';
 
 @Injectable()
 export class HabitService {
   constructor(
-    @InjectRepository(Habit)
-    private readonly habitRepository: Repository<Habit>,
-    @InjectRepository(HabitLog)
-    private readonly habitLogRepository: Repository<HabitLog>,
+    private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
   ) {}
 
-  async createHabit(userId: number, dto: CreateHabitDto): Promise<Habit> {
-    const habit = this.habitRepository.create({ ...dto, userId });
-    return this.habitRepository.save(habit);
-  }
-
-  async getHabits(userId: number): Promise<Habit[]> {
-    return this.habitRepository.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
+  async createHabit(userId: string, dto: CreateHabitDto) {
+    return this.prisma.habit.create({
+      data: { ...dto, userId, frequency: dto.frequency as HabitFrequency },
     });
   }
 
-  async getHabit(userId: number, habitId: number): Promise<Habit> {
-    const habit = await this.habitRepository.findOne({
+  async getHabits(userId: string) {
+    return this.prisma.habit.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getHabit(userId: string, habitId: string) {
+    const habit = await this.prisma.habit.findUnique({
       where: { id: habitId },
-      relations: ['logs'],
+      include: { logs: true },
     });
     if (!habit) throw new NotFoundException('Habit not found');
     if (habit.userId !== userId) throw new ForbiddenException();
@@ -44,17 +40,22 @@ export class HabitService {
   }
 
   async updateHabit(
-    userId: number,
-    habitId: number,
+    userId: string,
+    habitId: string,
     dto: UpdateHabitDto,
-  ): Promise<Habit> {
+  ) {
     const habit = await this.getHabit(userId, habitId);
-    Object.assign(habit, dto);
-    return this.habitRepository.save(habit);
+    return this.prisma.habit.update({
+      where: { id: habitId },
+      data: {
+        ...dto,
+        frequency: dto.frequency ? (dto.frequency as HabitFrequency) : habit.frequency,
+      },
+    });
   }
 
-  async completeHabit(userId: number, habitId: number): Promise<Habit> {
-    const habit = await this.habitRepository.findOne({
+  async completeHabit(userId: string, habitId: string) {
+    const habit = await this.prisma.habit.findUnique({
       where: { id: habitId, userId },
     });
     if (!habit) throw new NotFoundException('Habit not found');
@@ -63,50 +64,57 @@ export class HabitService {
     today.setHours(0, 0, 0, 0);
 
     // Prevent double-completion on the same day
-    const alreadyDone = await this.habitLogRepository.findOne({
+    const alreadyDone = await this.prisma.habitLog.findFirst({
       where: { habitId, completedAt: today },
     });
     if (alreadyDone) {
       throw new BadRequestException('Habit already completed today');
     }
 
-    const log = this.habitLogRepository.create({ habitId, completedAt: today });
-    await this.habitLogRepository.save(log);
+    await this.prisma.habitLog.create({
+      data: { habitId, completedAt: today },
+    });
 
     // Streak calculation
     const lastDate = habit.lastCompletedDate
       ? new Date(habit.lastCompletedDate)
       : null;
 
+    let newStreak = habit.currentStreak;
+
     if (lastDate) {
       lastDate.setHours(0, 0, 0, 0);
       const diffDays =
         (today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
 
-      if (habit.frequency === 'daily') {
+      if (habit.frequency === HabitFrequency.DAILY) {
         if (diffDays === 1) {
-          habit.currentStreak += 1;
+          newStreak += 1;
         } else if (diffDays > 1) {
-          habit.currentStreak = 1; // streak broken
+          newStreak = 1; // streak broken
         }
         // diffDays === 0 means same day — prevented above
-      } else if (habit.frequency === 'weekly') {
+      } else if (habit.frequency === HabitFrequency.WEEKLY) {
         if (diffDays <= 7) {
-          habit.currentStreak += 1;
+          newStreak += 1;
         } else {
-          habit.currentStreak = 1;
+          newStreak = 1;
         }
       }
     } else {
-      habit.currentStreak = 1;
+      newStreak = 1;
     }
 
-    if (habit.currentStreak > habit.longestStreak) {
-      habit.longestStreak = habit.currentStreak;
-    }
+    const newLongestStreak = Math.max(newStreak, habit.longestStreak);
 
-    habit.lastCompletedDate = today;
-    const updated = await this.habitRepository.save(habit);
+    const updated = await this.prisma.habit.update({
+      where: { id: habitId },
+      data: {
+        currentStreak: newStreak,
+        longestStreak: newLongestStreak,
+        lastCompletedDate: today,
+      },
+    });
 
     // Milestone notifications
     const milestones = [7, 14, 30, 60, 100, 365];
@@ -115,7 +123,7 @@ export class HabitService {
         .createNotification({
           userId,
           title: `🔥 ${updated.currentStreak}-day streak!`,
-          message: `You\''ve completed "${updated.name}" for ${updated.currentStreak} days in a row. Keep it up!`,
+          message: `You've completed "${updated.name}" for ${updated.currentStreak} days in a row. Keep it up!`,
           type: NotificationType.SUCCESS,
         })
         .catch(() => null);
@@ -124,15 +132,15 @@ export class HabitService {
     return updated;
   }
 
-  async deleteHabit(userId: number, habitId: number): Promise<{ message: string }> {
-    const habit = await this.getHabit(userId, habitId);
-    await this.habitRepository.remove(habit);
+  async deleteHabit(userId: string, habitId: string): Promise<{ message: string }> {
+    await this.getHabit(userId, habitId);
+    await this.prisma.habit.delete({ where: { id: habitId } });
     return { message: 'Habit deleted' };
   }
 
-  async getHabitStats(userId: number, habitId: number) {
+  async getHabitStats(userId: string, habitId: string) {
     const habit = await this.getHabit(userId, habitId);
-    const totalCompletions = await this.habitLogRepository.count({
+    const totalCompletions = await this.prisma.habitLog.count({
       where: { habitId },
     });
 

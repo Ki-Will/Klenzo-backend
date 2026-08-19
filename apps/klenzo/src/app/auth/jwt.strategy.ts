@@ -1,22 +1,33 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Request } from 'express';
-import { User } from '../entities/user.entity';
+import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { Role } from '@prisma/client';
 
 export interface JwtPayload {
-  id: number;
+  id: string;
   email: string;
+}
+
+export interface UserPayload {
+  id: string;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  avatar: string | null;
+  role: Role;
+  isActive: boolean;
+  lastLogin: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly prisma: PrismaService,
     private readonly redis: RedisService,
   ) {
     super({
@@ -36,24 +47,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * on every single API call. The cache is invalidated on logout and
    * profile updates via RedisService.keys.userProfile(id).
    */
-  async validate(payload: JwtPayload): Promise<User> {
+  async validate(payload: JwtPayload): Promise<UserPayload> {
     const cacheKey = RedisService.keys.userProfile(payload.id);
 
     // Try cache first
-    const cached = await this.redis.get<User>(cacheKey);
+    const cached = await this.redis.get<UserPayload>(cacheKey);
     if (cached) {
       if (!cached.isActive) throw new UnauthorizedException('Account is inactive');
       return cached;
     }
 
     // Cache miss — hit the DB
-    const user = await this.userRepository.findOne({ where: { id: payload.id } });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.id } });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found or account is inactive');
     }
 
     // Cache for 2 minutes (don't cache sensitive fields like passwordHash)
-    const safe = {
+    const safe: UserPayload = {
       id: user.id,
       email: user.email,
       name: user.name,
@@ -64,7 +75,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       lastLogin: user.lastLogin,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-    } as User;
+    };
 
     await this.redis.set(cacheKey, safe, RedisService.TTL.USER_PROFILE);
     return safe;

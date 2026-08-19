@@ -7,6 +7,7 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { AuditLogService } from './audit-log.service';
+import { UserPayload } from '../auth/jwt.strategy';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -43,8 +44,9 @@ export class AuditInterceptor implements NestInterceptor {
       tap({
         next: (responseBody) => {
           // Fire-and-forget: Save audit log on success
-          const actorId = user?.id ? Number(user.id) : null;
-          const actorRole = user?.role || (actorId ? 'user' : 'system');
+          const actorUser = user as UserPayload | undefined;
+          const actorId = actorUser?.id || null;
+          const actorRole = actorUser?.role || (actorId ? 'user' : 'system');
 
           // Extract target information if possible (e.g. from route params)
           const targetType = className.replace('Controller', '').toLowerCase();
@@ -52,7 +54,7 @@ export class AuditInterceptor implements NestInterceptor {
 
           this.auditLogService.create({
             actorId,
-            actorRole,
+            actorRole: String(actorRole),
             action,
             targetType,
             targetId: targetId ? String(targetId) : null,
@@ -65,12 +67,13 @@ export class AuditInterceptor implements NestInterceptor {
         },
         error: (err) => {
           // Optionally we can log failed actions as well
-          const actorId = user?.id ? Number(user.id) : null;
-          const actorRole = user?.role || (actorId ? 'user' : 'system');
+          const actorUser = user as UserPayload | undefined;
+          const actorId = actorUser?.id || null;
+          const actorRole = actorUser?.role || (actorId ? 'user' : 'system');
           
           this.auditLogService.create({
             actorId,
-            actorRole,
+            actorRole: String(actorRole),
             action: `${action}.failed`,
             targetType: className.replace('Controller', '').toLowerCase(),
             targetId: request.params?.id || null,

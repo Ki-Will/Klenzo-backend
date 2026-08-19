@@ -1,21 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { loadConfig } from './config/configuration';
 
-// Entities
-import { User } from './entities/user.entity';
-import { Task } from './entities/task.entity';
-import { Habit, HabitLog } from './entities/habit.entity';
-import { Transaction } from './entities/transaction.entity';
-import { Group, GroupMember } from './entities/group.entity';
-import { Budget } from './entities/budget.entity';
-import { Account } from './entities/account.entity';
-import { Notification } from './entities/notification.entity';
-import { AuditLog } from './entities/audit-log.entity';
-import { SystemMetric } from './entities/system-metric.entity';
+// Prisma
+import { PrismaModule } from './prisma/prisma.module';
 
 // Feature modules
 import { RedisModule } from './redis/redis.module';
@@ -42,31 +32,8 @@ const isDev = process.env.NODE_ENV !== 'production';
       ignoreEnvFile: !isDev,
     }),
 
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432', 10),
-      username: process.env.DB_USER || 'klenzo',
-      password: process.env.DB_PASSWORD || 'klenzo_password',
-      database: process.env.DB_NAME || 'klenzo_db',
-      entities: [
-        User,
-        Task,
-        Habit,
-        HabitLog,
-        Transaction,
-        Group,
-        GroupMember,
-        Budget,
-        Account,
-        Notification,
-        AuditLog,
-        SystemMetric,
-      ],
-      synchronize: isDev,
-      // dropSchema: true,
-      logging: isDev ? ['error', 'warn'] : false,
-    }),
+    // Prisma — global database connection
+    PrismaModule,
 
     // Redis — global, available in every module without re-importing
     RedisModule,

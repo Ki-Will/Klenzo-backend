@@ -84,9 +84,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   // ── Typed key builders — keeps key names consistent across the app ────────
 
   static keys = {
-    banners:           ()         => 'banners:active',
-    userNotifications: (uid: number) => `notif:user:${uid}`,
-    userProfile:       (uid: number) => `user:profile:${uid}`,
-    insights:          (uid: number) => `insights:dashboard:${uid}`,
+    banners:           ()            => 'banners:active',
+    userNotifications: (uid: string) => `notif:user:${uid}`,
+    userProfile:       (uid: string) => `user:profile:${uid}`,
+    insights:          (uid: string) => `insights:dashboard:${uid}`,
   };
 }

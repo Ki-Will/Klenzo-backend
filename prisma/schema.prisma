@@ -1,0 +1,355 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["auth", "productivity", "habit", "finance", "notifications", "public"]
+}
+
+// Enums
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+
+  @@schema("auth")
+}
+
+enum TransactionStatus {
+  PENDING
+  APPROVED
+
+  @@schema("finance")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+
+  @@schema("finance")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+
+  @@schema("productivity")
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+
+  @@schema("notifications")
+}
+
+enum NotificationCategory {
+  NOTIFICATION
+  BANNER
+  INSIGHT
+  TRANSACTION
+  SECURITY
+  GROUP
+
+  @@schema("notifications")
+}
+
+enum HabitFrequency {
+  DAILY
+  WEEKLY
+
+  @@schema("habit")
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+
+  @@schema("finance")
+}
+
+// 
+// AUTH SCHEMA
+// 
+
+model User {
+  id                   String    @id @default(uuid())
+  email                String    @unique
+  passwordHash         String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  lastLogin            DateTime?
+  isActive             Boolean   @default(true)
+  refreshToken         String?
+  refreshTokenExpires  DateTime?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  failedLoginAttempts  Int       @default(0)
+  role                 Role      @default(USER)
+  name                 String?
+  phone                String?
+  avatar               String?
+  notificationSettings Json?
+
+  // Relations
+  transactions  Transaction[]
+  groups        Group[]
+  budgets       Budget[]
+  accounts      Account[]
+  habits        Habit[]
+  tasks         Task[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+  @@schema("auth")
+}
+
+// 
+// PRODUCTIVITY SCHEMA
+// 
+
+model Task {
+  id          String     @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  dueDate     DateTime?
+  priority    Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+  @@schema("productivity")
+  @@index([userId])
+  @@index([status])
+}
+
+// 
+// HABIT SCHEMA
+// 
+
+model Habit {
+  id                String        @id @default(uuid())
+  userId            String
+  name              String
+  description       String?
+  frequency         HabitFrequency
+  currentStreak     Int            @default(0)
+  longestStreak     Int            @default(0)
+  lastCompletedDate DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs HabitLog[]
+
+  @@map("habits")
+  @@schema("habit")
+  @@index([userId])
+}
+
+model HabitLog {
+  id          String   @id @default(uuid())
+  habitId     String
+  completedAt DateTime
+  createdAt   DateTime @default(now())
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@map("habit_logs")
+  @@schema("habit")
+  @@index([habitId])
+}
+
+// 
+// FINANCE SCHEMA
+// 
+
+model Group {
+  id        String      @id @default(uuid())
+  name      String
+  createdBy String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user         User          @relation(fields: [createdBy], references: [id])
+  members      GroupMember[]
+  transactions Transaction[]
+
+  @@map("groups")
+  @@schema("finance")
+  @@index([createdBy])
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  userId    String
+  email     String
+  groupId   String
+  createdAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("group_members")
+  @@schema("finance")
+  @@index([groupId])
+  @@index([userId])
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  balance   Decimal  @default(0)
+  currency  String   @default("USD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("accounts")
+  @@schema("finance")
+  @@index([userId])
+}
+
+model Budget {
+  id          String       @id @default(uuid())
+  userId      String
+  name        String       @default("General Budget")
+  category    String?
+  type        String       @default("expense")
+  limitAmount Decimal
+  spent       Decimal      @default(0)
+  period      BudgetPeriod @default(MONTHLY)
+  color       String?
+  icon        String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("budgets")
+  @@schema("finance")
+  @@index([userId])
+}
+
+model Transaction {
+  id                  String            @id @default(uuid())
+  userId              String
+  groupId             String?
+  accountId           String?
+  parentTransactionId String?
+  status              TransactionStatus @default(APPROVED)
+  transactionType     TransactionType   @default(EXPENSE)
+  amount              Decimal
+  description         String?
+  category            String?
+  budgetId            String?
+  date                DateTime
+  createdAt           DateTime          @default(now())
+
+  user              User?         @relation(fields: [userId], references: [id])
+  group             Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  account           Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  budget            Budget?       @relation(fields: [budgetId], references: [id])
+  parentTransaction Transaction?  @relation("ParentTransaction", fields: [parentTransactionId], references: [id], onDelete: SetNull)
+  childTransactions Transaction[] @relation("ParentTransaction")
+
+  @@map("transactions")
+  @@schema("finance")
+  @@index([userId])
+  @@index([groupId])
+  @@index([status])
+  @@index([parentTransactionId])
+  @@index([budgetId])
+  @@index([accountId])
+}
+
+// 
+// NOTIFICATIONS SCHEMA
+// 
+
+model Notification {
+  id          String              @id @default(uuid())
+  userId      String?
+  type        NotificationType    @default(INFO)
+  category    NotificationCategory @default(NOTIFICATION)
+  title       String
+  message     String?
+  isRead      Boolean             @default(false)
+  isDismissed Boolean             @default(false)
+  isGlobal    Boolean             @default(false)
+  color       String?
+  priority    String              @default("normal")
+  dismissible Boolean             @default(true)
+  link        String?
+  linkText    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime            @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+  @@schema("notifications")
+  @@index([userId])
+  @@index([category])
+  @@index([isRead])
+}
+
+// 
+// OBSERVABILITY SCHEMA (PUBLIC)
+// 
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?
+  actorRole   String
+  action      String
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  ipAddress   String?
+  requestPath String?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@map("audit_logs")
+  @@schema("public")
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SystemMetric {
+  id         String   @id @default(uuid())
+  metricName String
+  value      Decimal
+  labels     Json?
+  recordedAt DateTime @default(now())
+
+  @@map("system_metrics")
+  @@schema("public")
+  @@index([metricName, recordedAt])
+}
