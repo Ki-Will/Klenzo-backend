@@ -1,37 +1,24 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '../entities/user.entity';
-import { Transaction } from '../entities/transaction.entity';
-import { SystemMetric } from '../entities/system-metric.entity';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class MetricAggregatorJob implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MetricAggregatorJob.name);
   private intervalId: NodeJS.Timeout | null = null;
 
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
-    @InjectRepository(Transaction)
-    private readonly transactionRepo: Repository<Transaction>,
-    @InjectRepository(SystemMetric)
-    private readonly metricRepo: Repository<SystemMetric>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
     this.logger.log('Starting MetricAggregatorJob (runs every 60 seconds)...');
-    // Run immediately on start
     this.aggregateMetrics().catch((err) =>
       this.logger.error('Failed initial metric aggregation', err)
     );
 
-    // Schedule periodic execution
     this.intervalId = setInterval(() => {
       this.aggregateMetrics().catch((err) =>
         this.logger.error('Failed metric aggregation', err)
       );
-    }, 60000); // every 60 seconds
+    }, 60000);
   }
 
   onModuleDestroy() {
@@ -47,30 +34,28 @@ export class MetricAggregatorJob implements OnModuleInit, OnModuleDestroy {
 
     try {
       // 1. Total Users
-      const totalUsers = await this.userRepo.count();
+      const totalUsers = await this.prisma.user.count();
       await this.saveMetric('total_users', totalUsers, now);
 
       // 2. Active Users (logged in within last 15 minutes)
       const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
-      const activeUsers = await this.userRepo
-        .createQueryBuilder('user')
-        .where('user.lastLogin > :date', { date: fifteenMinsAgo })
-        .getCount();
+      const activeUsers = await this.prisma.user.count({
+        where: { lastLogin: { gt: fifteenMinsAgo } },
+      });
       await this.saveMetric('active_users_15m', activeUsers, now);
 
       // 3. Total Transactions
-      const totalTransactions = await this.transactionRepo.count();
+      const totalTransactions = await this.prisma.transaction.count();
       await this.saveMetric('total_transactions', totalTransactions, now);
 
-      // 4. Transaction Volume (Sum of all transaction amounts)
-      const sumResult = await this.transactionRepo
-        .createQueryBuilder('t')
-        .select('SUM(t.amount)', 'sum')
-        .getRawOne();
-      const transactionVolume = parseFloat(sumResult?.sum || '0');
+      // 4. Transaction Volume
+      const sumResult = await this.prisma.transaction.aggregate({
+        _sum: { amount: true },
+      });
+      const transactionVolume = Number(sumResult._sum.amount ?? 0);
       await this.saveMetric('transaction_volume', transactionVolume, now);
 
-      // 5. System Health (mocked as 99.9 or stable)
+      // 5. System Health (mocked)
       await this.saveMetric('system_health', 99.9, now);
 
       this.logger.log('Metric aggregation completed successfully.');
@@ -81,13 +66,14 @@ export class MetricAggregatorJob implements OnModuleInit, OnModuleDestroy {
 
   private async saveMetric(name: string, value: number, recordedAt: Date) {
     try {
-      const metric = this.metricRepo.create({
-        metricName: name,
-        value,
-        labels: { source: 'MetricAggregatorJob' },
-        recordedAt,
+      await this.prisma.systemMetric.create({
+        data: {
+          metricName: name,
+          value,
+          labels: { source: 'MetricAggregatorJob' },
+          recordedAt,
+        },
       });
-      await this.metricRepo.save(metric);
     } catch (err) {
       this.logger.error(`Failed to save metric ${name}:`, err);
     }
