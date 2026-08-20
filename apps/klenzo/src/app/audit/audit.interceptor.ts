@@ -4,8 +4,7 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, tap } from 'rxjs';
 import { AuditLogService } from './audit-log.service';
 import { UserPayload } from '../auth/jwt.strategy';
 
@@ -42,7 +41,7 @@ export class AuditInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap({
-        next: (responseBody) => {
+        next: (responseBody: unknown) => {
           // Fire-and-forget: Save audit log on success
           const actorUser = user as UserPayload | undefined;
           const actorId = actorUser?.id || null;
@@ -50,7 +49,7 @@ export class AuditInterceptor implements NestInterceptor {
 
           // Extract target information if possible (e.g. from route params)
           const targetType = className.replace('Controller', '').toLowerCase();
-          const targetId = request.params?.id || responseBody?.id || null;
+          const targetId = request.params?.id || (responseBody as Record<string, unknown>)?.id || null;
 
           this.auditLogService.create({
             actorId,
@@ -65,7 +64,7 @@ export class AuditInterceptor implements NestInterceptor {
             console.error('AuditInterceptor failed to write log:', err);
           });
         },
-        error: (err) => {
+        error: (err: Error) => {
           // Optionally we can log failed actions as well
           const actorUser = user as UserPayload | undefined;
           const actorId = actorUser?.id || null;
