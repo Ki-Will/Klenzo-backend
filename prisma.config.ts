@@ -3,14 +3,5 @@ import 'dotenv/config';
 
 export default defineConfig({
   earlyAccess: true,
-  schema: {
-    kind: 'single',
-    filePath: 'prisma/schema.prisma',
-  },
-  datasources: [
-    {
-      provider: 'postgresql',
-      url: process.env.DATABASE_URL || '',
-    },
-  ],
+  schema: 'prisma/schema.prisma',
 });
