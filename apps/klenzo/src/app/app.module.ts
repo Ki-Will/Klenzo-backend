@@ -19,6 +19,10 @@ import { AdminModule } from './admin/admin.module';
 import { AuditModule } from './audit/audit.module';
 import { LoggerModule } from './logger/logger.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { WalletModule } from './wallet/wallet.module';
+import { TransfersModule } from './transfers/transfers.module';
+import { KycModule } from './kyc/kyc.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -58,6 +62,10 @@ const isDev = process.env.NODE_ENV !== 'production';
     AuditModule,
     LoggerModule,
     MetricsModule,
+    WalletModule,
+    TransfersModule,
+    KycModule,
+    PayrollModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
