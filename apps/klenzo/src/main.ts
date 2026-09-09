@@ -1,8 +1,8 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const cookieParser = require('cookie-parser');
+import cookieParser from 'cookie-parser';
+import * as express from 'express';
 import { AppModule } from './app/app.module';
 import { AllExceptionsFilter } from './app/common/filters/all-exceptions.filter';
 
@@ -10,10 +10,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // ── Cookie parser — must come before guards that read req.cookies ──────────
-  app.use((cookieParser as unknown as () => ReturnType<typeof cookieParser>)());
+  app.use(cookieParser());
 
   // Increase payload limit for base64 image uploads
-  const express = require('express');
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
