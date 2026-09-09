@@ -1,5 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Klenzo Consolidated V2 Prisma Schema File
 
 generator client {
   provider        = "prisma-client-js"
@@ -11,7 +10,7 @@ datasource db {
   schemas  = ["auth", "productivity", "habit", "finance", "notifications", "public"]
 }
 
-// Enums
+// ── Enums ───────────────────────────────────────────────────────────────────
 
 enum Role {
   USER
@@ -24,6 +23,8 @@ enum Role {
 enum TransactionStatus {
   PENDING
   APPROVED
+  FAILED
+  REJECTED
 
   @@schema("finance")
 }
@@ -31,6 +32,8 @@ enum TransactionStatus {
 enum TransactionType {
   INCOME
   EXPENSE
+  TRANSFER
+  PAYROLL
 
   @@schema("finance")
 }
@@ -80,9 +83,42 @@ enum BudgetPeriod {
   @@schema("finance")
 }
 
-// 
-// AUTH SCHEMA
-// 
+enum TransferType {
+  P2P
+  MOBILE_MONEY
+  BANK_TRANSFER
+
+  @@schema("finance")
+}
+
+enum TransferStatus {
+  INITIATED
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@schema("finance")
+}
+
+enum KycTier {
+  TIER_0
+  TIER_1
+  TIER_2
+  TIER_3
+
+  @@schema("auth")
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+
+  @@schema("auth")
+}
+
+// ── AUTH SCHEMA ─────────────────────────────────────────────────────────────
 
 model User {
   id                   String    @id @default(uuid())
@@ -104,22 +140,44 @@ model User {
   notificationSettings Json?
 
   // Relations
-  transactions  Transaction[]
-  groups        Group[]
-  budgets       Budget[]
-  accounts      Account[]
-  habits        Habit[]
-  tasks         Task[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
+  transactions      Transaction[]
+  groups            Group[]
+  budgets           Budget[]
+  accounts          Account[]
+  wallets           Wallet[]
+  transfersSent     Transfer[]        @relation("TransfersSent")
+  habits            Habit[]
+  tasks             Task[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  kycRecord         KycRecord?
+  payrollEmployees  PayrollEmployee[]
 
   @@map("users")
   @@schema("auth")
+  @@index([email, isActive])
+  @@index([createdAt])
 }
 
-// 
-// PRODUCTIVITY SCHEMA
-// 
+model KycRecord {
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  tier           KycTier   @default(TIER_0)
+  status         KycStatus @default(NOT_SUBMITTED)
+  documentType   String?
+  documentNumber String?
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("kyc_records")
+  @@schema("auth")
+  @@index([status])
+}
+
+// ── PRODUCTIVITY SCHEMA ─────────────────────────────────────────────────────
 
 model Task {
   id          String     @id @default(uuid())
@@ -136,16 +194,14 @@ model Task {
 
   @@map("tasks")
   @@schema("productivity")
-  @@index([userId])
-  @@index([status])
+  @@index([userId, status])
+  @@index([dueDate])
 }
 
-// 
-// HABIT SCHEMA
-// 
+// ── HABIT SCHEMA ────────────────────────────────────────────────────────────
 
 model Habit {
-  id                String        @id @default(uuid())
+  id                String         @id @default(uuid())
   userId            String
   name              String
   description       String?
@@ -174,19 +230,83 @@ model HabitLog {
 
   @@map("habit_logs")
   @@schema("habit")
-  @@index([habitId])
+  @@index([habitId, completedAt])
 }
 
-// 
-// FINANCE SCHEMA
-// 
+// ── FINANCE SCHEMA ──────────────────────────────────────────────────────────
+
+model Wallet {
+  id            String   @id @default(uuid())
+  userId        String
+  name          String   @default("Main Wallet")
+  currency      String   @default("USD")
+  balance       Decimal  @default(0)
+  accountNumber String   @unique
+  isPrimary     Boolean  @default(false)
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+  @@schema("finance")
+  @@index([userId, isPrimary])
+}
+
+model Transfer {
+  id          String         @id @default(uuid())
+  senderId    String
+  recipient   String
+  amount      Decimal
+  currency    String         @default("USD")
+  type        TransferType   @default(P2P)
+  status      TransferStatus @default(COMPLETED)
+  reference   String         @unique
+  date        DateTime       @default(now())
+
+  sender User @relation("TransfersSent", fields: [senderId], references: [id])
+
+  @@map("transfers")
+  @@schema("finance")
+  @@index([senderId, date])
+  @@index([status])
+}
+
+model PayrollRun {
+  id          String   @id @default(uuid())
+  period      String
+  totalAmount Decimal
+  status      String   @default("READY")
+  createdAt   DateTime @default(now())
+
+  @@map("payroll_runs")
+  @@schema("finance")
+  @@index([createdAt])
+}
+
+model PayrollEmployee {
+  id        String   @id @default(uuid())
+  userId    String?
+  name      String
+  role      String
+  salary    Decimal
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("payroll_employees")
+  @@schema("finance")
+  @@index([userId])
+}
 
 model Group {
-  id        String      @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   createdBy String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user         User          @relation(fields: [createdBy], references: [id])
   members      GroupMember[]
@@ -208,8 +328,7 @@ model GroupMember {
 
   @@map("group_members")
   @@schema("finance")
-  @@index([groupId])
-  @@index([userId])
+  @@index([groupId, userId])
 }
 
 model Account {
@@ -250,7 +369,7 @@ model Budget {
 
   @@map("budgets")
   @@schema("finance")
-  @@index([userId])
+  @@index([userId, category])
 }
 
 model Transaction {
@@ -277,49 +396,43 @@ model Transaction {
 
   @@map("transactions")
   @@schema("finance")
-  @@index([userId])
-  @@index([groupId])
+  @@index([userId, date])
+  @@index([groupId, date])
   @@index([status])
-  @@index([parentTransactionId])
   @@index([budgetId])
   @@index([accountId])
 }
 
-// 
-// NOTIFICATIONS SCHEMA
-// 
+// ── NOTIFICATIONS SCHEMA ────────────────────────────────────────────────────
 
 model Notification {
-  id          String              @id @default(uuid())
+  id          String               @id @default(uuid())
   userId      String?
-  type        NotificationType    @default(INFO)
+  type        NotificationType     @default(INFO)
   category    NotificationCategory @default(NOTIFICATION)
   title       String
   message     String?
-  isRead      Boolean             @default(false)
-  isDismissed Boolean             @default(false)
-  isGlobal    Boolean             @default(false)
+  isRead      Boolean              @default(false)
+  isDismissed Boolean              @default(false)
+  isGlobal    Boolean              @default(false)
   color       String?
-  priority    String              @default("normal")
-  dismissible Boolean             @default(true)
+  priority    String               @default("normal")
+  dismissible Boolean              @default(true)
   link        String?
   linkText    String?
   startDate   DateTime?
   endDate     DateTime?
-  createdAt   DateTime            @default(now())
+  createdAt   DateTime             @default(now())
 
   user User? @relation(fields: [userId], references: [id])
 
   @@map("notifications")
   @@schema("notifications")
-  @@index([userId])
+  @@index([userId, isRead])
   @@index([category])
-  @@index([isRead])
 }
 
-// 
-// OBSERVABILITY SCHEMA (PUBLIC)
-// 
+// ── OBSERVABILITY SCHEMA (PUBLIC) ───────────────────────────────────────────
 
 model AuditLog {
   id          String   @id @default(uuid())
@@ -337,9 +450,8 @@ model AuditLog {
 
   @@map("audit_logs")
   @@schema("public")
-  @@index([actorId])
+  @@index([actorId, createdAt])
   @@index([action])
-  @@index([createdAt])
 }
 
 model SystemMetric {
