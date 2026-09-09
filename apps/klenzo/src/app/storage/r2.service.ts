@@ -80,7 +80,7 @@ export class R2Service implements OnModuleInit {
 
   async uploadFile(
     file: any,
-    folder: string = 'klenzo',
+    folder = 'klenzo',
   ): Promise<string> {
     const fileExtension = file.originalname.split('.').pop() || 'png';
     const key = `${folder}/${randomUUID()}.${fileExtension}`;
