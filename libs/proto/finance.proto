@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package finance;
+
+service FinanceService {
+  rpc GetUserWalletBalance (GetUserWalletBalanceRequest) returns (GetUserWalletBalanceResponse);
+}
+
+message GetUserWalletBalanceRequest {
+  string userId = 1;
+}
+
+message GetUserWalletBalanceResponse {
+  string userId = 1;
+  double mainWalletBalance = 2;
+  string currency = 3;
+}

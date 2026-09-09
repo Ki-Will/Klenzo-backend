@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse);
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool isValid = 1;
+  string userId = 2;
+  string role = 3;
+}
+
+message GetUserProfileRequest {
+  string userId = 1;
+}
+
+message GetUserProfileResponse {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  string role = 4;
+  bool isActive = 5;
+}

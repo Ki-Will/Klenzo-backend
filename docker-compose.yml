@@ -1,6 +1,162 @@
+version: '3.8'
+
 services:
 
-  # ── Infrastructure ──────────────────────────────────────────────────────────
+  # ── Edge Reverse Proxy ───────────────────────────────────────────────────────
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - auth-service
+      - finance-service
+      - productivity-service
+      - habit-service
+      - notification-service
+      - insight-service
+    networks:
+      - klenzo_network
+
+  # ── Microservices Application Tier ──────────────────────────────────────────
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        APP_NAME: auth-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=auth
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=super_secret_jwt_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - klenzo_network
+
+  finance-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        APP_NAME: finance-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=finance
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=super_secret_jwt_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - klenzo_network
+
+  productivity-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        APP_NAME: productivity-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=productivity
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=super_secret_jwt_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - klenzo_network
+
+  habit-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        APP_NAME: habit-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=habit
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=super_secret_jwt_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - klenzo_network
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        APP_NAME: notification-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=notifications
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - klenzo_network
+
+  insight-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        APP_NAME: insight-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3006
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - klenzo_network
+
+  # ── Infrastructure Tier ─────────────────────────────────────────────────────
 
   postgres:
     image: postgres:15-alpine
@@ -13,8 +169,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
-      - ./migrations/create-tables.sql:/docker-entrypoint-initdb.d/02-create-tables.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U klenzo -d klenzo_db"]
       interval: 5s
@@ -44,86 +198,26 @@ services:
       MINIO_ROOT_USER: klenzo_admin
       MINIO_ROOT_PASSWORD: klenzo_password
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Console → http://localhost:9001
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - minio_data:/data
     networks:
       - klenzo_network
 
-  # Development-only email catcher — http://localhost:8025
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI
+      - "1025:1025"
+      - "8025:8025"
     networks:
       - klenzo_network
-    # profiles:
-    #   - development
-
-  # ── Application ─────────────────────────────────────────────────────────────
-  #
-  # Uses Dockerfile.dev (not the production image).
-  #
-  # Volume strategy:
-  #   - `.:/app`              → mounts your entire workspace so every file save
-  #                             is immediately visible inside the container.
-  #   - `node_modules_vol`    → named volume that sits at /app/node_modules.
-  #                             Docker resolves this AFTER the bind mount, so the
-  #                             container's installed packages are never replaced
-  #                             by whatever is (or isn't) on your host.
-  #
-  # Hot-reload chain:
-  #   file saved on host
-  #     → bind mount makes it visible in container
-  #       → webpack poll detects change (poll: 1000ms)
-  #         → webpack rebuilds dist/apps/klenzo/main.js
-  #           → @nx/js:node restarts the Node process
-  #             → app is live again (usually < 5 seconds)
-
-  # klenzo:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.dev
-  #   restart: unless-stopped
-  #   volumes:
-  #     - .:/app                        # live source mount
-  #     - node_modules_vol:/app/node_modules   # isolated node_modules
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     - NODE_ENV=development
-  #     - PORT=3000
-  #     # Database
-  #     - DB_HOST=postgres
-  #     - DB_PORT=5432
-  #     - DB_USER=klenzo
-  #     - DB_PASSWORD=klenzo_password
-  #     - DB_NAME=klenzo_db
-  #     # Auth
-  #     - JWT_SECRET=secret_key
-  #     # Email
-  #     - SMTP_HOST=mailpit
-  #     - SMTP_PORT=1025
-  #     # Redis
-  #     - REDIS_HOST=redis
-  #     - REDIS_PORT=6379
-  #     # CORS
-  #     - CORS_ORIGIN=*
-  #   networks:
-  #     - klenzo_network
 
 volumes:
   postgres_data:
   minio_data:
-  node_modules_vol:   # keeps container node_modules separate from host
 
 networks:
   klenzo_network:
+    driver: bridge
