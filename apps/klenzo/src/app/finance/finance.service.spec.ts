@@ -3,7 +3,6 @@ import { FinanceService } from './finance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { InsightService } from '../insight/insight.service';
-import { NotFoundException } from '@nestjs/common';
 
 describe('FinanceService', () => {
   let service: FinanceService;
@@ -39,6 +38,7 @@ describe('FinanceService', () => {
 
     insightMock = {
       generateInsights: jest.fn(),
+      invalidateDashboard: jest.fn().mockResolvedValue(true),
     };
 
     const module: TestingModule = await Test.createTestingModule({
