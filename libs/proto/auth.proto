@@ -3,8 +3,14 @@ syntax = "proto3";
 package auth;
 
 service AuthService {
+  // Validate a JWT token and return user info
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+  
+  // Get user profile by ID
   rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse);
+  
+  // Check if user has a specific role
+  rpc CheckRole (CheckRoleRequest) returns (CheckRoleResponse);
 }
 
 message ValidateTokenRequest {
@@ -14,7 +20,9 @@ message ValidateTokenRequest {
 message ValidateTokenResponse {
   bool isValid = 1;
   string userId = 2;
-  string role = 3;
+  string email = 3;
+  string role = 4;
+  bool isActive = 5;
 }
 
 message GetUserProfileRequest {
@@ -25,6 +33,20 @@ message GetUserProfileResponse {
   string id = 1;
   string email = 2;
   string name = 3;
-  string role = 4;
-  bool isActive = 5;
+  string phone = 4;
+  string avatar = 5;
+  string role = 6;
+  bool isActive = 7;
+  string createdAt = 8;
+  string updatedAt = 9;
+}
+
+message CheckRoleRequest {
+  string userId = 1;
+  string requiredRole = 2;
+}
+
+message CheckRoleResponse {
+  bool hasRole = 1;
+  string actualRole = 2;
 }

@@ -3,7 +3,14 @@ syntax = "proto3";
 package finance;
 
 service FinanceService {
+  // Get user's main wallet balance
   rpc GetUserWalletBalance (GetUserWalletBalanceRequest) returns (GetUserWalletBalanceResponse);
+  
+  // Validate user has sufficient funds for a transfer
+  rpc ValidateSufficientFunds (ValidateSufficientFundsRequest) returns (ValidateSufficientFundsResponse);
+  
+  // Get user's transaction summary
+  rpc GetTransactionSummary (GetTransactionSummaryRequest) returns (GetTransactionSummaryResponse);
 }
 
 message GetUserWalletBalanceRequest {
@@ -14,4 +21,33 @@ message GetUserWalletBalanceResponse {
   string userId = 1;
   double mainWalletBalance = 2;
   string currency = 3;
+  bool hasWallet = 4;
+}
+
+message ValidateSufficientFundsRequest {
+  string userId = 1;
+  double amount = 2;
+  string currency = 3;
+}
+
+message ValidateSufficientFundsResponse {
+  bool isSufficient = 1;
+  double currentBalance = 2;
+  double requestedAmount = 3;
+  string currency = 4;
+}
+
+message GetTransactionSummaryRequest {
+  string userId = 1;
+  string startDate = 2;
+  string endDate = 3;
+}
+
+message GetTransactionSummaryResponse {
+  string userId = 1;
+  double totalIncome = 2;
+  double totalExpenses = 3;
+  double netBalance = 4;
+  int32 transactionCount = 5;
+  string currency = 6;
 }
