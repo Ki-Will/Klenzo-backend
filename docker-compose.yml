@@ -13,12 +13,18 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      - auth-service
-      - finance-service
-      - productivity-service
-      - habit-service
-      - notification-service
-      - insight-service
+      auth-service:
+        condition: service_healthy
+      finance-service:
+        condition: service_healthy
+      productivity-service:
+        condition: service_healthy
+      habit-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      insight-service:
+        condition: service_healthy
     networks:
       - klenzo_network
 
@@ -33,16 +39,26 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - AUTH_SERVICE_PORT=3001
+      - AUTH_GRPC_PORT=5001
       - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=auth
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=super_secret_jwt_key
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key}
+    ports:
+      - "3001:3001"
+      - "5001:5001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
@@ -55,16 +71,28 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3002
+      - FINANCE_SERVICE_PORT=3002
+      - FINANCE_GRPC_PORT=5002
+      - AUTH_GRPC_URL=auth-service:5001
+      - AUTH_GRPC_PORT=5001
       - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=finance
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=super_secret_jwt_key
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key}
+    ports:
+      - "3002:3002"
+      - "5002:5002"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
@@ -77,16 +105,24 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3003
+      - PRODUCTIVITY_SERVICE_PORT=3003
       - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=productivity
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=super_secret_jwt_key
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key}
+    ports:
+      - "3003:3003"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
@@ -99,16 +135,24 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3004
+      - HABIT_SERVICE_PORT=3004
       - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=habit
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=super_secret_jwt_key
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key}
+    ports:
+      - "3004:3004"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
@@ -121,17 +165,25 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3005
+      - NOTIFICATION_SERVICE_PORT=3005
       - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=notifications
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
+    ports:
+      - "3005:3005"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3005/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
@@ -144,15 +196,23 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3006
+      - INSIGHT_SERVICE_PORT=3006
       - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=public
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+    ports:
+      - "3006:3006"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3006/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
