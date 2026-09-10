@@ -306,6 +306,18 @@ export class AuthService {
     this.sessions.set(userId, sessions);
   }
 
+  // ─── Sessions ─────────────────────────────────────────────────────────────
+  async getSessions(userId: string) {
+    return this.sessions.get(userId) || [];
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    const userSessions = this.sessions.get(userId) || [];
+    const updated = userSessions.filter((s) => s.id !== sessionId);
+    this.sessions.set(userId, updated);
+    return { message: "Session revoked successfully" };
+  }
+
   // ─── Admin: list users ────────────────────────────────────────────────────
   async listUsers() {
     const users = await this.prisma.user.findMany({

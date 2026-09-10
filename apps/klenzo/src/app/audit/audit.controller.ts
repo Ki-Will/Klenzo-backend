@@ -45,8 +45,8 @@ export class AuditController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getUserEvents(
     @Param('userId') userId: string,
-    @Query('limit') limit?: string,
     @CurrentUser() user: UserPayload,
+    @Query('limit') limit?: string,
   ) {
     // Users can only see their own events, admins can see any user's events
     if (user.id !== userId && user.role !== 'ADMIN' && user.role !== 'SUPERADMIN') {

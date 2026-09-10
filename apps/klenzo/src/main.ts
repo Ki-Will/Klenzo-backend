@@ -43,7 +43,7 @@ async function bootstrap() {
     compression({
       level: 6,
       threshold: 1024, // Only compress responses > 1KB
-      filter: (req, res) => {
+      filter: (req: any, res: any) => {
         if (req.headers['x-no-compression']) return false;
         return compression.filter(req, res);
       },
@@ -114,7 +114,6 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
-      forbidNonWhitelisted: true,
       disableErrorMessages: process.env.NODE_ENV === 'production',
     }),
   );
