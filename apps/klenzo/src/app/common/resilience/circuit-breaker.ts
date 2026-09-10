@@ -4,7 +4,7 @@ import * as CircuitBreaker from 'opossum';
  * Circuit breaker options for gRPC calls.
  * Prevents cascading failures when a downstream service is down.
  */
-const circuitBreakerOptions: CircuitBreaker.Options = {
+const circuitBreakerOptions: any = {
   timeout: 5000, // 5 second timeout
   errorThresholdPercentage: 50, // Open circuit if 50% of requests fail
   resetTimeout: 30000, // Try again after 30 seconds
@@ -19,7 +19,7 @@ const circuitBreakerOptions: CircuitBreaker.Options = {
 export function createCircuitBreaker<T extends (...args: any[]) => any>(
   fn: T,
   name: string,
-  options?: Partial<CircuitBreaker.Options>,
+  options?: any,
 ): T {
   const breaker = new CircuitBreaker(fn, {
     ...circuitBreakerOptions,
