@@ -1,0 +1,30 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "backup/current-main",
+    "feature/backend-improvements-1691664975529083473",
+    "fix/microservices-tests-and-imports-18274325506939056357",
+    "jules-7069949843868045211-707d97bd",
+    "main",
+    "origin",
+    "routine-test-execution-15285242301718035760"
+  ],
+  "parent": {
+    "backup/current-main": "main",
+    "feature/backend-improvements-1691664975529083473": "main",
+    "fix/microservices-tests-and-imports-18274325506939056357": "main",
+    "jules-7069949843868045211-707d97bd": "main",
+    "main": null,
+    "origin": "main",
+    "routine-test-execution-15285242301718035760": "main"
+  },
+  "order": [
+    "main",
+    "backup/current-main",
+    "feature/backend-improvements-1691664975529083473",
+    "fix/microservices-tests-and-imports-18274325506939056357",
+    "jules-7069949843868045211-707d97bd",
+    "origin",
+    "routine-test-execution-15285242301718035760"
+  ]
+}
