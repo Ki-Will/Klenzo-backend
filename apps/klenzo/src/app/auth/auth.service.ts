@@ -86,13 +86,8 @@ export class AuthService {
         'Account is locked. Reset your password to regain access.',
       );
     }
-    console.log('USER:', user.email);
-    console.log('ACTIVE:', user.isActive);
-    console.log('FAILED ATTEMPTS:', user.failedLoginAttempts);
-    console.log('HASH EXISTS:', !!user.passwordHash);
 
     const match = await bcrypt.compare(dto.password, user.passwordHash);
-    console.log('PASSWORD MATCH:', match);
     if (!match) {
       const newFailedAttempts = user.failedLoginAttempts + 1;
       if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
@@ -201,19 +196,20 @@ export class AuthService {
     token: string,
     newPassword: string,
   ): Promise<{ message: string }> {
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
     const user = await this.prisma.user.findFirst({
-      where: { passwordResetToken: hashedToken },
+      where: {
+        passwordResetToken: hashedToken,
+        passwordResetExpires: { gt: new Date() },
+      },
     });
 
-    if (
-      !user ||
-      !user.passwordResetExpires ||
-      user.passwordResetExpires < new Date()
-    ) {
-      throw new UnauthorizedException(
-        'Invalid or expired password reset token',
-      );
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired reset token');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -224,11 +220,11 @@ export class AuthService {
         passwordResetToken: null,
         passwordResetExpires: null,
         failedLoginAttempts: 0,
-        isActive: true,
+        isActive: true, // unlock if account was locked
       },
     });
 
-    return { message: 'Password reset successfully' };
+    return { message: 'Password reset successful' };
   }
 
   // ─── Profile ──────────────────────────────────────────────────────────────
@@ -240,45 +236,26 @@ export class AuthService {
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-
-    if (dto.email && dto.email !== user.email) {
-      const conflict = await this.prisma.user.findUnique({
-        where: { email: dto.email },
-      });
-      if (conflict) throw new ConflictException('Email already in use');
-    }
-
-    const updates: any = {};
-    if (dto.email !== undefined) updates.email = dto.email;
-    if (dto.name !== undefined) updates.name = dto.name;
-    if (dto.phone !== undefined) updates.phone = dto.phone;
-    if (dto.notificationSettings !== undefined) updates.notificationSettings = dto.notificationSettings;
-
-    if (dto.avatar) {
-      console.log('Backend: Avatar is a regular URL:', dto.avatar);
-      updates.avatar = dto.avatar;
-    }
-
-    await this.prisma.user.update({
+    const user = await this.prisma.user.update({
       where: { id: userId },
-      data: updates,
+      data: dto,
     });
-    // Evict cached profile so the next JWT validation picks up the new data
+
+    // Invalidate cached profile
     await this.redis.del(RedisService.keys.userProfile(userId));
-    return this.getProfile(userId);
+
+    return this.safeUser(user);
   }
 
   async changePassword(
     userId: string,
-    currentPassword: string,
+    oldPassword: string,
     newPassword: string,
-  ): Promise<{ success: boolean }> {
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    const match = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!match) {
       throw new UnauthorizedException('Current password is incorrect');
     }
@@ -288,86 +265,61 @@ export class AuthService {
       where: { id: userId },
       data: { passwordHash },
     });
+
+    // Invalidate cached profile
     await this.redis.del(RedisService.keys.userProfile(userId));
-    return { success: true };
-  }
 
-  // ─── Sessions ─────────────────────────────────────────────────────────────
-
-  async getSessions(userId: string) {
-    const userSessions = this.sessions.get(userId) || [];
-    return userSessions.map((s, idx) => ({
-      id: s.id,
-      device: s.device,
-      location: s.location,
-      lastSeen: s.lastSeen,
-      isCurrent: idx === userSessions.length - 1,
-    }));
-  }
-
-  async revokeSession(
-    userId: string,
-    sessionId: string,
-  ): Promise<{ success: boolean }> {
-    const existing = this.sessions.get(userId) || [];
-    this.sessions.set(
-      userId,
-      existing.filter((s) => s.id !== sessionId),
-    );
-    return { success: true };
+    return { message: 'Password changed successfully' };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  /** Strip sensitive fields before returning user to client */
-  private safeUser(user: {
-    id: string;
-    email: string;
-    name: string | null;
-    phone: string | null;
-    avatar: string | null;
-    role: Role;
-    isActive: boolean;
-    lastLogin: Date | null;
-    notificationSettings: any;
-    createdAt: Date;
-  }) {
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name ?? null,
-      phone: user.phone ?? null,
-      avatar: user.avatar ?? null,
-      role: user.role,
-      isActive: user.isActive,
-      lastLogin: user.lastLogin ?? null,
-      notificationSettings: user.notificationSettings ?? null,
-      createdAt: user.createdAt,
-    };
-  }
-
-  private trackSession(userId: string, device: string) {
-    const session: Session = {
-      id: crypto.randomUUID(),
-      device,
-      location: 'Unknown',
-      lastSeen: new Date(),
-    };
-    const existing = this.sessions.get(userId) || [];
-    // Keep last 5 sessions per user
-    const updated = [...existing, session].slice(-5);
-    this.sessions.set(userId, updated);
+  private safeUser(user: any) {
+    const { passwordHash, refreshToken, passwordResetToken, ...safe } = user;
+    return safe;
   }
 
   private async generateRefreshToken(userId: string): Promise<string> {
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomBytes(40).toString('hex');
     const hashed = crypto.createHash('sha256').update(token).digest('hex');
     const expires = new Date();
-    expires.setDate(expires.getDate() + 7);
+    expires.setDate(expires.getDate() + 7); // 7 days
+
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: hashed, refreshTokenExpires: expires },
     });
+
     return token;
+  }
+
+  private trackSession(userId: string, device: string) {
+    const sessions = this.sessions.get(userId) || [];
+    sessions.push({
+      id: crypto.randomUUID(),
+      device,
+      location: 'Unknown',
+      lastSeen: new Date(),
+    });
+    // Keep only last 10 sessions
+    if (sessions.length > 10) sessions.shift();
+    this.sessions.set(userId, sessions);
+  }
+
+  // ─── Admin: list users ────────────────────────────────────────────────────
+  async listUsers() {
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        lastLogin: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return users;
   }
 }
