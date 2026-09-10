@@ -465,3 +465,28 @@ model SystemMetric {
   @@schema("public")
   @@index([metricName, recordedAt])
 }
+
+// ── FINANCE EVENTS (Immutable Audit Trail) ─────────────────────────────────
+// Populated automatically by PostgreSQL triggers on finance tables.
+// This table is append-only — no UPDATE or DELETE operations allowed.
+
+model FinanceEvent {
+  id            String   @id @default(uuid())
+  eventType     String   @map("event_type")
+  tableName     String   @map("table_name")
+  recordId      String   @map("record_id")
+  userId        String?  @map("user_id")
+  oldValues     Json?    @map("old_values")
+  newValues     Json?    @map("new_values")
+  changedFields Json?    @map("changed_fields")
+  ipAddress     String?  @map("ip_address")
+  requestPath   String?  @map("request_path")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("finance_events")
+  @@schema("public")
+  @@index([tableName, recordId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
