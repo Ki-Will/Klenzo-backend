@@ -25,6 +25,9 @@ import { KycModule } from './kyc/kyc.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { AuditInterceptor } from './audit/audit.interceptor';
 
+// Health check
+import { HealthModule } from './health/health.module';
+
 const isDev = process.env.NODE_ENV !== 'production';
 
 @Module({
@@ -66,6 +69,7 @@ const isDev = process.env.NODE_ENV !== 'production';
     TransfersModule,
     KycModule,
     PayrollModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
