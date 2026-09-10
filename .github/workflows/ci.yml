@@ -32,6 +32,9 @@ jobs:
       - name: Run ESLint
         run: npx nx lint klenzo
 
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
       - name: Run TypeScript check
         run: npx tsc -p apps/klenzo/tsconfig.app.json --noEmit
 
