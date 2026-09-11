@@ -2,7 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { join } from 'path';
+import { existsSync } from 'fs';
 import { AppModule } from './app.module';
+
+// Resolve *.proto whether running from source (apps/finance-service/src)
+// or from the webpack build output (dist/apps/finance-service).
+function resolveProtoPath(file: string): string {
+  const fromDist = join(__dirname, 'libs', 'proto', file);
+  if (existsSync(fromDist)) return fromDist;
+  return join(__dirname, '..', '..', '..', 'libs', 'proto', file);
+}
 
 async function bootstrap() {
   const logger = new Logger('FinanceService');
@@ -37,14 +46,7 @@ async function bootstrap() {
       transport: Transport.GRPC,
       options: {
         package: 'finance',
-        protoPath: join(
-          __dirname,
-          '..',
-          '..',
-          'libs',
-          'proto',
-          'finance.proto',
-        ),
+        protoPath: resolveProtoPath('finance.proto'),
         url: `0.0.0.0:${grpcPort}`,
       },
     },

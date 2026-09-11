@@ -25,8 +25,17 @@ import { FinanceGrpcService } from './grpc/finance-grpc.service';
 // gRPC client for auth service
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { join } from 'path';
+import { existsSync } from 'fs';
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+// Resolve *.proto whether running from source (apps/finance-service/src)
+// or from the webpack build output (dist/apps/finance-service).
+function resolveProtoPath(file: string): string {
+  const fromDist = join(__dirname, 'libs', 'proto', file);
+  if (existsSync(fromDist)) return fromDist;
+  return join(__dirname, '..', '..', '..', 'libs', 'proto', file);
+}
 
 @Module({
   imports: [
@@ -55,7 +64,7 @@ const isDev = process.env.NODE_ENV !== 'production';
         transport: Transport.GRPC,
         options: {
           package: 'auth',
-          protoPath: join(__dirname, '..', '..', 'libs', 'proto', 'auth.proto'),
+          protoPath: resolveProtoPath('auth.proto'),
           url:
             process.env.AUTH_GRPC_URL || `localhost:${process.env.AUTH_GRPC_PORT || '5001'}`,
         },

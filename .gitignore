@@ -41,6 +41,9 @@ Thumbs.db
 /.nx/cache
 /.nx/workspace-data
 
+# Microservice build artifacts (built via docker or npm scripts)
+/apps/*/dist/
+
 # Environment
 .env
 .env.local

@@ -139,8 +139,12 @@ npx prisma generate
 # 7. Seed database (optional)
 npm run seed
 
-# 8. Start development server
+# 8. Start development server (runs all microservices)
 npm run dev
+
+# Or start individual services:
+npm run dev:auth
+npm run dev:finance
 ```
 
 ### Docker Compose (Full Stack)
@@ -324,11 +328,16 @@ docker-compose up --build -d
 
 ### Production (Render / Railway / etc.)
 
-Each service can be deployed as a separate container:
+Each service is built independently using its own Dockerfile:
 
 ```bash
-# Example: Build individual service
-docker build -f Dockerfile.microservice --build-arg APP_NAME=auth-service -t klenzo/auth-service .
+# Build individual service
+docker build -f apps/auth-service/Dockerfile -t klenzo/auth-service .
+
+# Or use npm scripts
+npm run docker:build:auth
+npm run docker:build:finance
+npm run docker:build:all  # Builds all services
 ```
 
 Required environment variables:
@@ -350,21 +359,31 @@ FINANCE_GRPC_URL=finance-service:5002
 ```
 Klenzo-backend/
 ├── apps/
-│   ├── klenzo/                    # Main monolith (all modules)
+│   ├── klenzo/                    # Shared kernel / library (all modules)
+│   │   └── Dockerfile             # Monolith-specific Dockerfile (legacy)
 │   ├── auth-service/              # Auth microservice (gRPC + HTTP)
+│   │   └── Dockerfile             # Independent microservice build
 │   ├── finance-service/           # Finance microservice (gRPC + HTTP)
+│   │   └── Dockerfile             # Independent microservice build
 │   ├── productivity-service/      # Productivity microservice
+│   │   └── Dockerfile             # Independent microservice build
 │   ├── habit-service/             # Habit tracking microservice
+│   │   └── Dockerfile             # Independent microservice build
 │   ├── notification-service/      # Notification microservice
+│   │   └── Dockerfile             # Independent microservice build
 │   └── insight-service/           # Analytics & admin microservice
+│       └── Dockerfile             # Independent microservice build
 ├── libs/
 │   └── proto/                     # gRPC Protocol Buffer definitions
 ├── prisma/
 │   ├── schema.prisma              # Multi-schema database definition
 │   └── migrations/                # Database migrations + triggers
+├── scripts/
+│   └── build-services.sh          # Build all microservices script
 ├── nginx/                         # Reverse proxy configuration
-├── docker-compose.yml             # Full stack orchestration
-├── Dockerfile.microservice        # Multi-stage service build
+├── docker-compose.yml             # Full stack orchestration (uses per-service Dockerfiles)
+├── Dockerfile.microservice        # Legacy monolith Dockerfile (deprecated)
+├── nx.json                        # Nx workspace configuration (microservice-optimized)
 └── .github/workflows/ci.yml       # CI/CD pipeline
 ```
 

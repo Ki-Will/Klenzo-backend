@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
+    "module": "commonjs",
+    "types": ["node"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "es2021",
+    "moduleResolution": "node",
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": "../../",
+    "paths": {
+      "@config/*": ["apps/klenzo/src/app/config/*"],
+      "@prisma/*": ["apps/klenzo/src/app/prisma/*"],
+      "@redis/*": ["apps/klenzo/src/app/redis/*"],
+      "@logger/*": ["apps/klenzo/src/app/logger/*"],
+      "@notification/*": ["apps/klenzo/src/app/notification/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts"
+  ]
+}

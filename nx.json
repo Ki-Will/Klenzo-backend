@@ -1,8 +1,14 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "npmScope": "klenzo",
+  "defaultBase": "main",
   "namedInputs": {
     "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "sharedGlobals": [
+      "{workspaceRoot}/tsconfig.base.json",
+      "{workspaceRoot}/.env.example",
+      "{workspaceRoot}/prisma/schema.prisma"
+    ],
     "production": [
       "default",
       "!{projectRoot}/.eslintrc.json",
@@ -12,21 +18,9 @@
       "!{projectRoot}/jest.config.[jt]s",
       "!{projectRoot}/src/test-setup.[jt]s",
       "!{projectRoot}/test-setup.[jt]s"
-    ],
-    "sharedGlobals": []
+    ]
   },
   "plugins": [
-    {
-      "plugin": "@nx/webpack/plugin",
-      "options": {
-        "buildTargetName": "build",
-        "serveTargetName": "serve",
-        "previewTargetName": "preview",
-        "buildDepsTargetName": "build-deps",
-        "watchDepsTargetName": "watch-deps",
-        "serveStaticTargetName": "serve-static"
-      }
-    },
     {
       "plugin": "@nx/eslint/plugin",
       "options": {
@@ -37,17 +31,34 @@
       "plugin": "@nx/jest/plugin",
       "options": {
         "targetName": "test"
-      },
-      "exclude": [
-        "apps/klenzo-e2e/**/*"
-      ]
+      }
     }
   ],
   "targetDefaults": {
-    "@nx/js:tsc": {
+    "build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
+      "inputs": ["production"]
+    },
+    "typecheck": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "test": {
+      "cache": true,
+      "inputs": ["default", "{workspaceRoot}/jest.preset.js"],
+      "options": {
+        "passWithNoTests": true
+      }
+    },
+    "serve": {
+      "cache": false,
+      "executor": "@nx/js:node",
+      "options": {
+        "buildTarget": "<project>:build:development",
+        "watch": true,
+        "debounce": 500
+      }
     }
-  }
+  },
+  "nxCloudAccessToken": ""
 }

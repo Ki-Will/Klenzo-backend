@@ -13,8 +13,13 @@ export default [
       '@nx/enforce-module-boundaries': [
         'error',
         {
-          enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          enforceBuildableLibDependency: false,
+          allow: [
+            '^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$',
+            // Services intentionally import shared modules from apps/klenzo/src/app.
+            // This is the migration path to true standalone microservices.
+            '.*apps/klenzo/src/app/.*',
+          ],
           depConstraints: [
             {
               sourceTag: '*',

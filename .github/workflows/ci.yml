@@ -12,7 +12,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ── Lint & Type Check ─────────────────────────────────────────────────────
+  # ── Lint & Type Check (all services) ───────────────────────────────────────
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
@@ -29,13 +29,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint
-        run: npx nx lint klenzo
+      - name: Generate Prisma Client
+        run: npx prisma generate
 
-      - name: Run TypeScript check
-        run: npx tsc -p apps/klenzo/tsconfig.app.json --noEmit
+      - name: Run ESLint (all projects)
+        run: npx nx run-many -t lint
 
-  # ── Unit Tests ────────────────────────────────────────────────────────────
+      - name: Run TypeScript check (all services)
+        run: npx nx run-many -t typecheck
+
+  # ── Unit Tests (all services) ───────────────────────────────────────────────
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -53,8 +56,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
       - name: Run unit tests
-        run: npx nx test klenzo --coverage
+        run: npx nx run-many -t test --coverage
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -64,7 +70,7 @@ jobs:
           path: coverage/
           retention-days: 7
 
-  # ── Build ─────────────────────────────────────────────────────────────────
+  # ── Build (all services) ────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -85,17 +91,17 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Build production
-        run: npx nx build klenzo --configuration=production
+      - name: Build all services
+        run: npx nx run-many -t build --configuration=production
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: klenzo-build
-          path: dist/apps/klenzo/
+          path: dist/apps/
           retention-days: 7
 
-  # ── Docker Build ──────────────────────────────────────────────────────────
+  # ── Docker Build (one image per service) ────────────────────────────────────
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -156,13 +162,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── Deploy (placeholder) ──────────────────────────────────────────────────
+  # ── Deploy (placeholder) ────────────────────────────────────────────────────
   # Uncomment and configure for your deployment target (Render, Railway, etc.)
   # deploy:
   #   name: Deploy
   #   runs-on: ubuntu-latest
   #   needs: docker
   #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   strategy:
+  #     matrix:
+  #       service: [auth-service, finance-service, productivity-service, habit-service, notification-service, insight-service]
   #   steps:
   #     - name: Deploy to Render
   #       run: |

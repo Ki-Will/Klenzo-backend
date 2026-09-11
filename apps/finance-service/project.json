@@ -1,9 +1,9 @@
 {
-  "name": "klenzo",
+  "name": "finance-service",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/klenzo/src",
+  "sourceRoot": "apps/finance-service/src",
   "projectType": "application",
-  "tags": ["scope:shared", "type:monolith", "type:library"],
+  "tags": ["scope:finance", "type:microservice", "port:3002", "grpc:5002"],
   "targets": {
     "build": {
       "executor": "@nx/webpack:webpack",
@@ -11,11 +11,11 @@
       "options": {
         "target": "node",
         "compiler": "tsc",
-        "main": "apps/klenzo/src/main.ts",
-        "tsConfig": "apps/klenzo/tsconfig.app.json",
+        "main": "apps/finance-service/src/main.ts",
+        "tsConfig": "apps/finance-service/tsconfig.app.json",
         "assets": [
           {
-            "glob": "**/*",
+            "glob": "*.proto",
             "input": "libs/proto",
             "output": "libs/proto"
           }
@@ -24,8 +24,7 @@
         "outputHashing": "none",
         "generatePackageJson": true,
         "sourceMap": true,
-        "outputPath": "dist/apps/klenzo",
-        "webpackConfig": "apps/klenzo/webpack.config.js"
+        "outputPath": "dist/apps/finance-service"
       },
       "configurations": {
         "development": {
@@ -42,19 +41,24 @@
     "serve": {
       "executor": "@nx/js:node",
       "options": {
-        "buildTarget": "klenzo:build:development",
+        "buildTarget": "finance-service:build:development",
         "watch": true,
-        "debounce": 500,
-        "inspect": false
+        "debounce": 500
       },
       "configurations": {
         "development": {
-          "buildTarget": "klenzo:build:development"
+          "buildTarget": "finance-service:build:development"
         },
         "production": {
-          "buildTarget": "klenzo:build:production",
+          "buildTarget": "finance-service:build:production",
           "watch": false
         }
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/finance-service/tsconfig.app.json --noEmit"
       }
     },
     "test": {

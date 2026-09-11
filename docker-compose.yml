@@ -33,9 +33,7 @@ services:
   auth-service:
     build:
       context: .
-      dockerfile: Dockerfile.microservice
-      args:
-        APP_NAME: auth-service
+      dockerfile: apps/auth-service/Dockerfile
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -54,7 +52,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 15s
       timeout: 5s
       start_period: 10s
@@ -65,9 +63,7 @@ services:
   finance-service:
     build:
       context: .
-      dockerfile: Dockerfile.microservice
-      args:
-        APP_NAME: finance-service
+      dockerfile: apps/finance-service/Dockerfile
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -88,7 +84,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 15s
       timeout: 5s
       start_period: 10s
@@ -99,9 +95,7 @@ services:
   productivity-service:
     build:
       context: .
-      dockerfile: Dockerfile.microservice
-      args:
-        APP_NAME: productivity-service
+      dockerfile: apps/productivity-service/Dockerfile
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -118,7 +112,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 15s
       timeout: 5s
       start_period: 10s
@@ -129,9 +123,7 @@ services:
   habit-service:
     build:
       context: .
-      dockerfile: Dockerfile.microservice
-      args:
-        APP_NAME: habit-service
+      dockerfile: apps/habit-service/Dockerfile
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -148,7 +140,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 15s
       timeout: 5s
       start_period: 10s
@@ -159,9 +151,7 @@ services:
   notification-service:
     build:
       context: .
-      dockerfile: Dockerfile.microservice
-      args:
-        APP_NAME: notification-service
+      dockerfile: apps/notification-service/Dockerfile
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -179,7 +169,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3005/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3005/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 15s
       timeout: 5s
       start_period: 10s
@@ -190,9 +180,7 @@ services:
   insight-service:
     build:
       context: .
-      dockerfile: Dockerfile.microservice
-      args:
-        APP_NAME: insight-service
+      dockerfile: apps/insight-service/Dockerfile
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -208,7 +196,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3006/api/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3006/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
       interval: 15s
       timeout: 5s
       start_period: 10s

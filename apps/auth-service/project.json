@@ -1,9 +1,9 @@
 {
-  "name": "klenzo",
+  "name": "auth-service",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/klenzo/src",
+  "sourceRoot": "apps/auth-service/src",
   "projectType": "application",
-  "tags": ["scope:shared", "type:monolith", "type:library"],
+  "tags": ["scope:auth", "type:microservice", "port:3001", "grpc:5001"],
   "targets": {
     "build": {
       "executor": "@nx/webpack:webpack",
@@ -11,11 +11,11 @@
       "options": {
         "target": "node",
         "compiler": "tsc",
-        "main": "apps/klenzo/src/main.ts",
-        "tsConfig": "apps/klenzo/tsconfig.app.json",
+        "main": "apps/auth-service/src/main.ts",
+        "tsConfig": "apps/auth-service/tsconfig.app.json",
         "assets": [
           {
-            "glob": "**/*",
+            "glob": "auth.proto",
             "input": "libs/proto",
             "output": "libs/proto"
           }
@@ -24,8 +24,7 @@
         "outputHashing": "none",
         "generatePackageJson": true,
         "sourceMap": true,
-        "outputPath": "dist/apps/klenzo",
-        "webpackConfig": "apps/klenzo/webpack.config.js"
+        "outputPath": "dist/apps/auth-service"
       },
       "configurations": {
         "development": {
@@ -42,19 +41,24 @@
     "serve": {
       "executor": "@nx/js:node",
       "options": {
-        "buildTarget": "klenzo:build:development",
+        "buildTarget": "auth-service:build:development",
         "watch": true,
-        "debounce": 500,
-        "inspect": false
+        "debounce": 500
       },
       "configurations": {
         "development": {
-          "buildTarget": "klenzo:build:development"
+          "buildTarget": "auth-service:build:development"
         },
         "production": {
-          "buildTarget": "klenzo:build:production",
+          "buildTarget": "auth-service:build:production",
           "watch": false
         }
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/auth-service/tsconfig.app.json --noEmit"
       }
     },
     "test": {
