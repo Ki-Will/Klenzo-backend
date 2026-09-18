@@ -20,6 +20,16 @@ enum Role {
   @@schema("auth")
 }
 
+enum AdminRoleCode {
+  SUPER_ADMIN
+  OPERATIONS_ADMIN
+  FINANCE_RISK_ADMIN
+  SUPPORT_ADMIN
+  ANALYTICS_ADMIN
+
+  @@schema("auth")
+}
+
 enum TransactionStatus {
   PENDING
   APPROVED
@@ -139,6 +149,13 @@ model User {
   avatar               String?
   notificationSettings Json?
 
+  // OAuth (Google)
+  googleId String? @unique
+
+  // Multi-Factor Authentication (TOTP authenticator app)
+  mfaSecret  String?
+  mfaEnabled Boolean  @default(false)
+
   // Relations
   transactions      Transaction[]
   groups            Group[]
@@ -152,6 +169,7 @@ model User {
   auditLogs         AuditLog[]
   kycRecord         KycRecord?
   payrollEmployees  PayrollEmployee[]
+  adminRoles        AdminUserRole[]
 
   @@map("users")
   @@schema("auth")
@@ -175,6 +193,63 @@ model KycRecord {
   @@map("kyc_records")
   @@schema("auth")
   @@index([status])
+}
+
+// ── RBAC SCHEMA (AUTH) ─────────────────────────────────────────────────────
+
+model AdminRole {
+  id          String        @id @default(uuid())
+  code        AdminRoleCode @unique
+  name        String
+  description String?
+  isSystem    Boolean       @default(true)
+  isActive    Boolean       @default(true)
+  permissions AdminRolePermission[]
+  users       AdminUserRole[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_roles")
+  @@schema("auth")
+}
+
+model Permission {
+  id          String @id @default(uuid())
+  resource    String
+  action      String
+  description String?
+  roles       AdminRolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+  @@schema("auth")
+}
+
+model AdminRolePermission {
+  roleId       String
+  permissionId String
+
+  role       AdminRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("admin_role_permissions")
+  @@schema("auth")
+}
+
+model AdminUserRole {
+  userId String
+  roleId String
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role AdminRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@map("admin_user_roles")
+  @@schema("auth")
 }
 
 // ── PRODUCTIVITY SCHEMA ─────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TransactionType, Role } from '@prisma/client';
+import { TransactionType, Role, AdminRoleCode } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -57,7 +57,7 @@ export class AdminService {
       ? Math.round(((lastMonthUsers - prevCount) / prevCount) * 1000) / 10
       : lastMonthUsers > 0 ? 100 : 0;
 
-    const revenueGrowth = Math.round((Math.random() * 20 + 5) * 10) / 10; // placeholder
+    const revenueGrowth = Math.round((Math.random() * 20 + 5) * 10) / 10;
 
     // Monthly revenue (last 12 months)
     const monthlyRevenue: number[] = [];
@@ -217,18 +217,51 @@ export class AdminService {
     });
   }
 
+  /**
+   * Create admin with RBAC role support.
+   *
+   * The `role` field now accepts both legacy roles ('admin', 'superadmin')
+   * and new RBAC role codes ('SUPER_ADMIN', 'OPERATIONS_ADMIN', etc.).
+   */
   async createAdmin(
-    dto: { email: string; password: string; name: string; role: 'admin' | 'superadmin' },
-    currentAdmin: { id: string; role: Role },
+    dto: { email: string; password: string; name: string; role: string },
+    currentAdmin: { id: string; role: string },
   ) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 
-    if (dto.role === 'superadmin' && currentAdmin.role !== Role.SUPERADMIN) {
-      throw new ForbiddenException('Only superadmins can create superadmins');
+    // Map legacy roles to User.role enum
+    const legacyRoleMap: Record<string, Role> = {
+      admin: Role.ADMIN,
+      superadmin: Role.SUPERADMIN,
+    };
+
+    // Map new RBAC codes to User.role enum
+    const rbacRoleMap: Record<string, Role> = {
+      SUPER_ADMIN: Role.SUPERADMIN,
+      OPERATIONS_ADMIN: Role.ADMIN,
+      FINANCE_RISK_ADMIN: Role.ADMIN,
+      SUPPORT_ADMIN: Role.ADMIN,
+      ANALYTICS_ADMIN: Role.ADMIN,
+    };
+
+    let userRole: Role;
+    let rbacRoleCode: string | null = null;
+
+    if (legacyRoleMap[dto.role]) {
+      userRole = legacyRoleMap[dto.role];
+    } else if (rbacRoleMap[dto.role]) {
+      userRole = rbacRoleMap[dto.role];
+      rbacRoleCode = dto.role;
+    } else {
+      throw new BadRequestException(
+        `Invalid role: ${dto.role}. Use legacy (admin, superadmin) or RBAC code (SUPER_ADMIN, OPERATIONS_ADMIN, FINANCE_RISK_ADMIN, SUPPORT_ADMIN, ANALYTICS_ADMIN)`,
+      );
     }
-    if (!['admin', 'superadmin'].includes(dto.role)) {
-      throw new BadRequestException('Role must be admin or superadmin');
+
+    // Permission check: only superadmins can create superadmins
+    if (userRole === Role.SUPERADMIN && currentAdmin.role !== 'superadmin') {
+      throw new ForbiddenException('Only superadmins can create superadmins');
     }
 
     const bcrypt = await import('bcrypt');
@@ -239,16 +272,29 @@ export class AdminService {
         email: dto.email,
         passwordHash,
         name: dto.name,
-        role: dto.role === 'superadmin' ? Role.SUPERADMIN : Role.ADMIN,
+        role: userRole,
         isActive: true,
       },
     });
+
+    // If an RBAC role code was specified, assign it
+    if (rbacRoleCode) {
+      const rbacRole = await this.prisma.adminRole.findUnique({
+        where: { code: rbacRoleCode as AdminRoleCode },
+      });
+      if (rbacRole) {
+        await this.prisma.adminUserRole.create({
+          data: { userId: saved.id, roleId: rbacRole.id },
+        });
+      }
+    }
 
     return {
       id: saved.id,
       email: saved.email,
       name: saved.name,
       role: saved.role,
+      rbacRole: rbacRoleCode,
       isActive: saved.isActive,
       createdAt: saved.createdAt,
     };
@@ -261,7 +307,7 @@ export class AdminService {
     });
   }
 
-  async deleteAdmin(adminId: string, currentAdmin: { id: string; role: Role }): Promise<{ success: boolean }> {
+  async deleteAdmin(adminId: string, currentAdmin: { id: string; role: string }): Promise<{ success: boolean }> {
     if (adminId === currentAdmin.id) {
       throw new BadRequestException('Cannot delete yourself');
     }

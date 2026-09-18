@@ -14,17 +14,18 @@ import { AdminService } from './admin.service';
 import { NotificationService } from '../notification/notification.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { PermissionGuard } from '../common/guards/permissions.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Role } from '@prisma/client';
 
 interface UserPayload {
   id: string;
   email: string;
-  role: Role;
+  role: string;
 }
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
 @Roles('admin', 'superadmin')
 @Controller('admin')
 export class AdminController {
@@ -36,6 +37,7 @@ export class AdminController {
   // ─── Platform Stats ───────────────────────────────────────────────────────
 
   @Get('stats')
+  @RequirePermissions('system.health_read', 'analytics.read')
   getStats() {
     return this.adminService.getStats();
   }
@@ -43,6 +45,7 @@ export class AdminController {
   // ─── User Management ──────────────────────────────────────────────────────
 
   @Get('users')
+  @RequirePermissions('users.read')
   getUsers(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
@@ -56,11 +59,13 @@ export class AdminController {
   }
 
   @Get('users/:id')
+  @RequirePermissions('users.read')
   getUserById(@Param('id') id: string) {
     return this.adminService.getUserById(id);
   }
 
   @Post('users/:id/toggle-active')
+  @RequirePermissions('users.suspend', 'users.reactivate')
   @HttpCode(HttpStatus.OK)
   toggleUserActive(
     @Param('id') id: string,
@@ -70,6 +75,7 @@ export class AdminController {
   }
 
   @Delete('users/:id')
+  @RequirePermissions('users.suspend')
   @HttpCode(HttpStatus.OK)
   deleteUser(@CurrentUser() user: UserPayload, @Param('id') id: string) {
     return this.adminService.deleteUser(id, user.id);
@@ -78,11 +84,13 @@ export class AdminController {
   // ─── Admin Management ─────────────────────────────────────────────────────
 
   @Get('admins')
+  @RequirePermissions('admins.read')
   getAdmins() {
     return this.adminService.getAdmins();
   }
 
   @Roles('superadmin')
+  @RequirePermissions('admins.create')
   @Post('admins')
   @HttpCode(HttpStatus.CREATED)
   createAdmin(
@@ -92,13 +100,14 @@ export class AdminController {
       email: string;
       password: string;
       name: string;
-      role: 'admin' | 'superadmin';
+      role: string;
     },
   ) {
     return this.adminService.createAdmin(dto, currentAdmin);
   }
 
   @Roles('superadmin')
+  @RequirePermissions('admins.disable')
   @Delete('admins/:id')
   @HttpCode(HttpStatus.OK)
   deleteAdmin(
@@ -111,17 +120,13 @@ export class AdminController {
   // ─── Broadcast / Banners ──────────────────────────────────────────────────
 
   @Post('broadcast')
+  @RequirePermissions('notifications.send')
   @HttpCode(HttpStatus.CREATED)
   async createBroadcast(
     @Body()
     dto: {
       title?: string;
       message: string;
-      /**
-       * Optional hex color for the banner background.
-       * Must be a 6-digit hex string: '#rrggbb'.
-       * Defaults to the platform indigo '#6366f1' if omitted or invalid.
-       */
       color?: string;
       dismissible?: boolean;
       link?: string;
@@ -135,17 +140,18 @@ export class AdminController {
     const allUsers = await this.adminService.getAllActiveUsers();
     const userIds = allUsers.map((u) => u.id);
     const userEmails = allUsers.map((u) => ({ id: u.id, email: u.email }));
-    console.log(dto);
 
     return this.notificationService.createBroadcast(dto, userIds, userEmails);
   }
 
   @Get('broadcast')
+  @RequirePermissions('notifications.read')
   getAllBroadcasts() {
     return this.notificationService.getAllBanners();
   }
 
   @Delete('broadcast/:id')
+  @RequirePermissions('notifications.manage')
   @HttpCode(HttpStatus.OK)
   deleteBroadcast(@Param('id') id: string) {
     return this.notificationService.deleteBanner(id);
