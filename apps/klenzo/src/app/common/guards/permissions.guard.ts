@@ -27,11 +27,12 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('Not authenticated');
     }
 
+    // Get effective permissions and attach to request for downstream use
+    const effectivePermissions = await this.rbacService.getEffectivePermissions(user.id);
+    request.user.permissions = effectivePermissions;
+
     // Check if user has ANY of the required permissions
-    const hasPermission = await this.rbacService.userHasAnyPermission(
-      user.id,
-      requiredPermissions,
-    );
+    const hasPermission = requiredPermissions.some((p) => effectivePermissions.includes(p));
 
     if (!hasPermission) {
       throw new ForbiddenException(
