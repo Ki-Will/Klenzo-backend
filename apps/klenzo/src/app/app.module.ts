@@ -17,6 +17,7 @@ import { NotificationModule } from './notification/notification.module';
 import { InsightModule } from './insight/insight.module';
 import { AdminModule } from './admin/admin.module';
 import { RbacModule } from './admin/rbac/rbac.module';
+import { FeatureFlagModule } from './feature-flags/feature-flag.module';
 import { AuditModule } from './audit/audit.module';
 import { LoggerModule } from './logger/logger.module';
 import { MetricsModule } from './metrics/metrics.module';
@@ -64,6 +65,7 @@ const isDev = process.env.NODE_ENV !== 'production';
     InsightModule,
     AdminModule,
     RbacModule,
+    FeatureFlagModule,
     AuditModule,
     LoggerModule,
     MetricsModule,
