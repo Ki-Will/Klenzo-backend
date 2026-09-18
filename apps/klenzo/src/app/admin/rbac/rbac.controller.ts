@@ -14,6 +14,7 @@ import {
 import { RbacService } from './rbac.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { PermissionGuard } from '../../common/guards/permissions.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -22,9 +23,10 @@ interface UserPayload {
   id: string;
   email: string;
   role: string;
+  permissions?: string[];
 }
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
 @Roles('admin', 'superadmin')
 @Controller('admin')
 export class RbacController {
@@ -45,28 +47,33 @@ export class RbacController {
   }
 
   @Post('roles')
-  @RequirePermissions('roles.manage')
+  @RequirePermissions('roles.create')
   @HttpCode(HttpStatus.CREATED)
   createRole(
+    @CurrentUser() user: UserPayload,
     @Body() dto: { code: string; name: string; description?: string },
   ) {
-    return this.rbacService.createRole(dto);
+    return this.rbacService.createRole(dto, user.id);
   }
 
   @Patch('roles/:id')
-  @RequirePermissions('roles.manage')
+  @RequirePermissions('roles.update')
   updateRole(
+    @CurrentUser() user: UserPayload,
     @Param('id') id: string,
     @Body() dto: { name?: string; description?: string; isActive?: boolean },
   ) {
-    return this.rbacService.updateRole(id, dto);
+    return this.rbacService.updateRole(id, dto, user.id);
   }
 
   @Delete('roles/:id')
-  @RequirePermissions('roles.manage')
+  @RequirePermissions('roles.delete')
   @HttpCode(HttpStatus.OK)
-  deleteRole(@Param('id') id: string) {
-    return this.rbacService.deleteRole(id);
+  deleteRole(
+    @CurrentUser() user: UserPayload,
+    @Param('id') id: string,
+  ) {
+    return this.rbacService.deleteRole(id, user.id);
   }
 
   // ─── Role Permissions ───────────────────────────────────────────────────
@@ -80,10 +87,11 @@ export class RbacController {
   @Put('roles/:id/permissions')
   @RequirePermissions('permissions.manage')
   setRolePermissions(
+    @CurrentUser() user: UserPayload,
     @Param('id') id: string,
     @Body() dto: { permissionIds: string[] },
   ) {
-    return this.rbacService.setRolePermissions(id, dto.permissionIds);
+    return this.rbacService.setRolePermissions(id, dto.permissionIds, user.id);
   }
 
   // ─── Permissions Catalog ────────────────────────────────────────────────
@@ -103,32 +111,40 @@ export class RbacController {
   }
 
   @Put('admins/:id/roles')
-  @RequirePermissions('admins.update')
+  @RequirePermissions('admins.assign_role')
   setAdminRoles(
+    @CurrentUser() user: UserPayload,
     @Param('id') id: string,
     @Body() dto: { roleIds: string[] },
   ) {
-    return this.rbacService.setAdminRoles(id, dto.roleIds);
+    return this.rbacService.setAdminRoles(id, dto.roleIds, user.id);
   }
 
   @Post('admins/:id/roles')
-  @RequirePermissions('admins.update')
+  @RequirePermissions('admins.assign_role')
   @HttpCode(HttpStatus.CREATED)
   assignRoleToAdmin(
+    @CurrentUser() user: UserPayload,
     @Param('id') id: string,
     @Body() dto: { roleId: string },
   ) {
-    return this.rbacService.assignRoleToAdmin(id, dto.roleId);
+    return this.rbacService.assignRoleToAdmin(
+      id,
+      dto.roleId,
+      user.id,
+      user.permissions ?? [],
+    );
   }
 
   @Delete('admins/:id/roles/:roleId')
-  @RequirePermissions('admins.update')
+  @RequirePermissions('admins.assign_role')
   @HttpCode(HttpStatus.OK)
   removeRoleFromAdmin(
+    @CurrentUser() user: UserPayload,
     @Param('id') id: string,
     @Param('roleId') roleId: string,
   ) {
-    return this.rbacService.removeRoleFromAdmin(id, roleId);
+    return this.rbacService.removeRoleFromAdmin(id, roleId, user.id);
   }
 
   // ─── Effective Permissions ──────────────────────────────────────────────
@@ -145,6 +161,6 @@ export class RbacController {
   @Roles('superadmin')
   @RequirePermissions('roles.manage')
   seedRbac(@CurrentUser() user: UserPayload) {
-    return this.rbacService.seed();
+    return this.rbacService.seed(user.id);
   }
 }
