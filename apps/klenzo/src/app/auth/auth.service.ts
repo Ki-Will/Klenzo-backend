@@ -13,6 +13,7 @@ import { RegisterDto, LoginDto, UpdateProfileDto } from '../dto/auth.dto';
 import { JwtPayload } from './jwt.strategy';
 import { NotificationService } from '../notification/notification.service';
 import { RedisService } from '../redis/redis.service';
+import { MfaService } from './mfa.service';
 import { Role } from '@prisma/client';
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly notificationService: NotificationService,
     private readonly redis: RedisService,
+    private readonly mfaService: MfaService,
   ) {}
 
   // ─── Register ─────────────────────────────────────────────────────────────
@@ -73,8 +75,17 @@ export class AuthService {
   // ─── Login ────────────────────────────────────────────────────────────────
   // Returns user profile inline so the frontend doesn't need GET /profile
   // immediately after login (fixes race condition / 401 on first request).
+  //
+  // When the user has MFA enabled, returns { mfaRequired: true, mfaToken }
+  // instead of tokens. The caller must POST /auth/login/mfa to complete.
 
-  async login(dto: LoginDto, device?: string) {
+  async login(
+    dto: LoginDto,
+    device?: string,
+  ): Promise<
+    | { accessToken: string; refreshToken: string; user: any }
+    | { mfaRequired: true; mfaToken: string }
+  > {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -115,6 +126,61 @@ export class AuthService {
 
     this.trackSession(user.id, device || 'Unknown device');
 
+    // If MFA is enabled, issue a short-lived challenge token instead of
+    // the real access token. The frontend must prompt for a TOTP code and
+    // call POST /auth/login/mfa to complete the login.
+    if (user.mfaEnabled) {
+      const mfaToken = this.jwtService.sign(
+        { sub: user.id, type: 'mfa_challenge' },
+        { expiresIn: '10m' },
+      );
+      return { mfaRequired: true, mfaToken };
+    }
+
+    return this.issueSession(user, device);
+  }
+
+  // ─── MFA login (second step) ─────────────────────────────────────────────
+  // Accepts the mfaToken issued by login() + a 6-digit TOTP code.
+
+  async mfaLogin(
+    mfaToken: string,
+    code: string,
+    device?: string,
+  ) {
+    let payload: { sub?: string; type?: string };
+    try {
+      payload = this.jwtService.verify(mfaToken);
+    } catch {
+      throw new UnauthorizedException(
+        'MFA challenge expired — please sign in again',
+      );
+    }
+
+    if (payload.type !== 'mfa_challenge' || !payload.sub) {
+      throw new UnauthorizedException('Invalid MFA challenge');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    // Verify the TOTP code (throws UnauthorizedException on failure)
+    await this.mfaService.verifyChallenge(user.id, code);
+
+    return this.issueSession(user, device);
+  }
+
+  // ─── Issue session (shared helper) ───────────────────────────────────────
+
+  async issueSession(
+    user: any,
+    device?: string,
+  ): Promise<{ accessToken: string; refreshToken: string; user: any }> {
+    this.trackSession(user.id, device || 'Unknown device');
     const payload: JwtPayload = { id: user.id, email: user.email };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = await this.generateRefreshToken(user.id);
@@ -124,6 +190,25 @@ export class AuthService {
       refreshToken,
       user: this.safeUser(user),
     };
+  }
+
+  // ─── MFA proxies ────────────────────────────────────────────────────────
+  // Thin wrappers so the controller can call this.authService.mfa*()
+
+  async mfaStatus(userId: string) {
+    return this.mfaService.status(userId);
+  }
+
+  async mfaSetup(userId: string) {
+    return this.mfaService.setup(userId);
+  }
+
+  async mfaEnable(userId: string, code: string) {
+    return this.mfaService.enable(userId, code);
+  }
+
+  async mfaDisable(userId: string, code: string) {
+    return this.mfaService.disable(userId, code);
   }
 
   // ─── Refresh ──────────────────────────────────────────────────────────────

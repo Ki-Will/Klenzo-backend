@@ -57,6 +57,12 @@
         }
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/klenzo/tsconfig.app.json --noEmit"
+      }
+    },
     "test": {
       "options": {
         "passWithNoTests": true

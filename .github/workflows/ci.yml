@@ -12,7 +12,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ── Lint & Type Check (all services) ───────────────────────────────────────
+  # ── Lint & Type Check (all services + monolith) ─────────────────────────────
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
@@ -38,7 +38,7 @@ jobs:
       - name: Run TypeScript check (all services)
         run: npx nx run-many -t typecheck
 
-  # ── Unit Tests (all services) ───────────────────────────────────────────────
+  # ── Unit Tests (all services + monolith) ────────────────────────────────────
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -70,7 +70,7 @@ jobs:
           path: coverage/
           retention-days: 7
 
-  # ── Build (all services) ────────────────────────────────────────────────────
+  # ── Build (all services + monolith) ─────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -101,7 +101,7 @@ jobs:
           path: dist/apps/
           retention-days: 7
 
-  # ── Docker Build (one image per service) ────────────────────────────────────
+  # ── Docker Build (monolith + microservices) ─────────────────────────────────
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -113,18 +113,20 @@ jobs:
     strategy:
       matrix:
         service:
+          - name: monolith
+            dockerfile: apps/klenzo/Dockerfile
           - name: auth-service
-            port: 3001
+            dockerfile: Dockerfile.microservice
           - name: finance-service
-            port: 3002
+            dockerfile: Dockerfile.microservice
           - name: productivity-service
-            port: 3003
+            dockerfile: Dockerfile.microservice
           - name: habit-service
-            port: 3004
+            dockerfile: Dockerfile.microservice
           - name: notification-service
-            port: 3005
+            dockerfile: Dockerfile.microservice
           - name: insight-service
-            port: 3006
+            dockerfile: Dockerfile.microservice
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -153,7 +155,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.microservice
+          file: ./${{ matrix.service.dockerfile }}
           push: true
           build-args: |
             APP_NAME=${{ matrix.service.name }}
@@ -171,7 +173,7 @@ jobs:
   #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
   #   strategy:
   #     matrix:
-  #       service: [auth-service, finance-service, productivity-service, habit-service, notification-service, insight-service]
+  #       service: [monolith, auth-service, finance-service, productivity-service, habit-service, notification-service, insight-service]
   #   steps:
   #     - name: Deploy to Render
   #       run: |

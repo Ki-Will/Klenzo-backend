@@ -170,6 +170,7 @@ model User {
   kycRecord         KycRecord?
   payrollEmployees  PayrollEmployee[]
   adminRoles        AdminUserRole[]
+  consentRecords    ConsentRecord[]
 
   @@map("users")
   @@schema("auth")
@@ -250,6 +251,56 @@ model AdminUserRole {
   @@id([userId, roleId])
   @@map("admin_user_roles")
   @@schema("auth")
+}
+
+// ── CONSENT SCHEMA (AUTH) ───────────────────────────────────────────────
+
+enum ConsentType {
+  PRIVACY_POLICY
+  TERMS_OF_SERVICE
+  MARKETING
+  ANALYTICS
+  DATA_SHARING
+
+  @@schema("auth")
+}
+
+model ConsentRecord {
+  id           String       @id @default(uuid())
+  userId       String
+  consentType  ConsentType
+  granted      Boolean
+  version      String
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime     @default(now())
+  revokedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, consentType])
+  @@map("consent_records")
+  @@schema("auth")
+  @@index([userId])
+  @@index([consentType])
+}
+
+model PolicyVersion {
+  id              String   @id @default(uuid())
+  policyType      String
+  version         String
+  effectiveDate   DateTime
+  contentUrl      String?
+  isActive        Boolean  @default(true)
+  requiresConsent Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([policyType, version])
+  @@map("policy_versions")
+  @@schema("auth")
+  @@index([policyType])
+  @@index([isActive])
 }
 
 // ── PLATFORM SCHEMA ────────────────────────────────────────────────────────
@@ -531,16 +582,19 @@ model Notification {
 // ── OBSERVABILITY SCHEMA (PUBLIC) ───────────────────────────────────────────
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  actorId     String?
-  actorRole   String
-  action      String
-  targetType  String?
-  targetId    String?
-  metadata    Json?
-  ipAddress   String?
-  requestPath String?
-  createdAt   DateTime @default(now())
+  id            String   @id @default(uuid())
+  actorId       String?
+  actorRole     String
+  action        String
+  targetType    String?
+  targetId      String?
+  metadata      Json?
+  ipAddress     String?
+  requestPath   String?
+  result        String   @default("SUCCESS") // SUCCESS | FAILED | DENIED
+  checksum      String? // SHA-256 of (id + action + targetType + targetId + metadata + createdAt) for tamper detection
+  previousChecksum String? // Chain hash — links to previous audit log's checksum for integrity chain
+  createdAt     DateTime @default(now())
 
   actor User? @relation(fields: [actorId], references: [id])
 
@@ -548,6 +602,8 @@ model AuditLog {
   @@schema("public")
   @@index([actorId, createdAt])
   @@index([action])
+  @@index([targetType, targetId])
+  @@index([result])
 }
 
 model SystemMetric {

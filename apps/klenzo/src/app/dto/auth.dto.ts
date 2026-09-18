@@ -1,4 +1,10 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  IsOptional,
+  Matches,
+} from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -64,4 +70,34 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(8)
   newPassword: string;
+}
+
+// ── Google OAuth ─────────────────────────────────────────────────────────────
+
+export class GoogleTokenDto {
+  @IsString()
+  idToken: string;
+}
+
+// ── MFA ──────────────────────────────────────────────────────────────────────
+
+export class MfaLoginDto {
+  @IsString()
+  mfaToken: string;
+
+  @IsString()
+  @Matches(/^\d{6}$/)
+  code: string;
+}
+
+export class EnableMfaDto {
+  @IsString()
+  @Matches(/^\d{6}$/)
+  code: string;
+}
+
+export class DisableMfaDto {
+  @IsString()
+  @Matches(/^\d{6}$/)
+  code: string;
 }

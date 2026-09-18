@@ -1,40 +1,57 @@
-version: '3.8'
-
 services:
 
-  # ── Edge Reverse Proxy ───────────────────────────────────────────────────────
+  # ── Monolith Mode (alternative to microservices) ─────────────────────────────
+  # Use this when running the full application as a single process.
+  # Start with: docker compose --profile monolith up monolith
+  # NOTE: Do NOT start both monolith and microservices simultaneously.
 
-  nginx:
+  monolith:
     build:
-      context: ./nginx
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/klenzo/Dockerfile
     restart: unless-stopped
+    profiles:
+      - monolith
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://klenzo:klenzo_password@postgres:5432/klenzo_db?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key}
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - R2_ENDPOINT_URL=http://minio:9000
+      - R2_ACCESS_KEY_ID=klenzo_admin
+      - R2_SECRET_ACCESS_KEY=klenzo_password
+      - R2_BUCKET_NAME=klenzo-bucket
     ports:
-      - "80:80"
-      - "443:443"
+      - "3000:3000"
     depends_on:
-      auth-service:
+      postgres:
         condition: service_healthy
-      finance-service:
+      redis:
         condition: service_healthy
-      productivity-service:
-        condition: service_healthy
-      habit-service:
-        condition: service_healthy
-      notification-service:
-        condition: service_healthy
-      insight-service:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - klenzo_network
 
   # ── Microservices Application Tier ──────────────────────────────────────────
+  # Start with: docker compose --profile microservices up
+  # NOTE: Do NOT start both monolith and microservices simultaneously.
 
   auth-service:
     build:
       context: .
       dockerfile: apps/auth-service/Dockerfile
     restart: unless-stopped
+    profiles:
+      - microservices
     environment:
       - NODE_ENV=production
       - AUTH_SERVICE_PORT=3001
@@ -65,6 +82,8 @@ services:
       context: .
       dockerfile: apps/finance-service/Dockerfile
     restart: unless-stopped
+    profiles:
+      - microservices
     environment:
       - NODE_ENV=production
       - FINANCE_SERVICE_PORT=3002
@@ -97,6 +116,8 @@ services:
       context: .
       dockerfile: apps/productivity-service/Dockerfile
     restart: unless-stopped
+    profiles:
+      - microservices
     environment:
       - NODE_ENV=production
       - PRODUCTIVITY_SERVICE_PORT=3003
@@ -125,6 +146,8 @@ services:
       context: .
       dockerfile: apps/habit-service/Dockerfile
     restart: unless-stopped
+    profiles:
+      - microservices
     environment:
       - NODE_ENV=production
       - HABIT_SERVICE_PORT=3004
@@ -153,6 +176,8 @@ services:
       context: .
       dockerfile: apps/notification-service/Dockerfile
     restart: unless-stopped
+    profiles:
+      - microservices
     environment:
       - NODE_ENV=production
       - NOTIFICATION_SERVICE_PORT=3005
@@ -182,6 +207,8 @@ services:
       context: .
       dockerfile: apps/insight-service/Dockerfile
     restart: unless-stopped
+    profiles:
+      - microservices
     environment:
       - NODE_ENV=production
       - INSIGHT_SERVICE_PORT=3006

@@ -4,27 +4,33 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-linux-headers --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++
 
 # Copy package descriptors
 COPY package.json package-lock.json tsconfig.base.json nx.json ./
 COPY prisma ./prisma/
-COPY apps/klenzo/src/app/config ./apps/klenzo/src/app/config
-COPY apps/klenzo/src/app/prisma ./apps/klenzo/src/app/prisma
-COPY apps/klenzo/src/app/redis ./apps/klenzo/src/app/redis
-COPY apps/klenzo/src/app/logger ./apps/klenzo/src/app/logger
-COPY apps/klenzo/src/app/finance ./apps/klenzo/src/app/finance
-COPY apps/klenzo/src/app/wallet ./apps/klenzo/src/app/wallet
-COPY apps/klenzo/src/app/transfers ./apps/klenzo/src/app/transfers
-COPY apps/klenzo/src/app/payroll ./apps/klenzo/src/app/payroll
-COPY apps/klenzo/src/app/notification ./apps/klenzo/src/app/notification
-COPY libs/proto ./libs/proto
 
 # Install dependencies
 RUN npm ci
 
 # Generate Prisma Client
 RUN npx prisma generate
+
+# Copy shared infrastructure (imported via relative paths from app.module.ts)
+COPY apps/klenzo/src/app/config ./apps/klenzo/src/app/config
+COPY apps/klenzo/src/app/prisma ./apps/klenzo/src/app/prisma
+COPY apps/klenzo/src/app/redis ./apps/klenzo/src/app/redis
+COPY apps/klenzo/src/app/logger ./apps/klenzo/src/app/logger
+
+# Copy finance-specific modules
+COPY apps/klenzo/src/app/finance ./apps/klenzo/src/app/finance
+COPY apps/klenzo/src/app/wallet ./apps/klenzo/src/app/wallet
+COPY apps/klenzo/src/app/transfers ./apps/klenzo/src/app/transfers
+COPY apps/klenzo/src/app/payroll ./apps/klenzo/src/app/payroll
+COPY apps/klenzo/src/app/notification ./apps/klenzo/src/app/notification
+
+# Copy gRPC proto files
+COPY libs/proto ./libs/proto
 
 # Copy finance-service source
 COPY apps/finance-service ./apps/finance-service

@@ -43,26 +43,46 @@ npm run seed
 npm run dev
 ```
 
-### Full Docker Stack
+### Microservices Mode (default)
 
 ```bash
-# Build and run everything
-docker-compose up --build -d
+# Build and run infrastructure + all microservices
+docker-compose --profile microservices up --build -d
 
 # Check status
-docker-compose ps
+docker-compose --profile microservices ps
 
 # View logs
-docker-compose logs -f nginx
 docker-compose logs -f auth-service
 docker-compose logs -f finance-service
+```
+
+### Monolith Mode (single process)
+
+The monolith serves every feature module on port 3000 in one process -
+useful for small deployments or local testing. Do NOT run it together with
+the microservices (they would duplicate the same endpoints):
+
+```bash
+# Build and run infrastructure + monolith
+docker-compose --profile monolith up --build -d
+
+# Or run the monolith alone
+npm run build:monolith
+npm start
 ```
 
 ### Accessing Services
 
 | Service | URL |
 |---------|-----|
-| API Gateway | http://localhost |
+| Monolith (single API) | http://localhost:3000 |
+| Auth Service | http://localhost:3001 |
+| Finance Service | http://localhost:3002 |
+| Productivity Service | http://localhost:3003 |
+| Habit Service | http://localhost:3004 |
+| Notification Service | http://localhost:3005 |
+| Insight Service | http://localhost:3006 |
 | Swagger Docs | http://localhost:3000/api/docs |
 | Mailpit UI | http://localhost:8025 |
 | MinIO Console | http://localhost:9001 |
@@ -133,7 +153,16 @@ FINANCE_GRPC_URL=finance-service:5002
 EOF
 
 # Deploy
-docker-compose -f docker-compose.yml up -d --build
+docker-compose --profile microservices -f docker-compose.yml up -d --build
+```
+
+### Monolith Docker Build
+
+```bash
+# Build the single-process monolith image
+npm run docker:build:monolith
+# or
+docker build -f apps/klenzo/Dockerfile -t klenzo/monolith .
 ```
 
 ## Environment Variables
@@ -217,10 +246,8 @@ curl http://localhost:3001/healthz
 curl http://localhost:3002/healthz
 curl http://localhost:3003/healthz
 
-# Check via Nginx
-curl http://localhost/healthz
-curl http://localhost/healthz/auth
-curl http://localhost/healthz/finance
+# Check monolith
+curl http://localhost:3000/healthz
 ```
 
 ## Monitoring
