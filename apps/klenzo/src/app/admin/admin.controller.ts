@@ -37,7 +37,7 @@ export class AdminController {
   // ─── Platform Stats ───────────────────────────────────────────────────────
 
   @Get('stats')
-  @RequirePermissions('system.health_read', 'analytics.read')
+  @RequirePermissions('system.health.read', 'analytics.read')
   getStats() {
     return this.adminService.getStats();
   }

@@ -16,6 +16,8 @@ export class RolesGuard implements CanActivate {
     }
     const { user } = context.switchToHttp().getRequest();
     if (!user) return false;
-    return requiredRoles.includes(user.role);
+    // Case-insensitive: JWT/DB roles may be 'ADMIN' (Prisma enum) or 'admin' (legacy seed)
+    const userRole = String(user.role ?? '').toLowerCase();
+    return requiredRoles.some((r) => r.toLowerCase() === userRole);
   }
 }

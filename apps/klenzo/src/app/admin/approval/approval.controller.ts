@@ -31,8 +31,11 @@ export class ApprovalController {
 
   @Get()
   @RequirePermissions('audit.read')
-  getPendingRequests(@Query('type') type?: string) {
-    return this.approvalService.getPendingRequests(type);
+  getPendingRequests(
+    @Query('type') type?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.approvalService.getPendingRequests(type, status);
   }
 
   @Get('my')
@@ -41,7 +44,7 @@ export class ApprovalController {
   }
 
   @Post(':id/approve')
-  @RequirePermissions('transactions.reverse_approve')
+  @RequirePermissions('transactions.reverse.approve')
   @HttpCode(HttpStatus.OK)
   approveRequest(
     @CurrentUser() user: UserPayload,
@@ -52,7 +55,7 @@ export class ApprovalController {
   }
 
   @Post(':id/reject')
-  @RequirePermissions('transactions.reverse_approve')
+  @RequirePermissions('transactions.reverse.approve')
   @HttpCode(HttpStatus.OK)
   rejectRequest(
     @CurrentUser() user: UserPayload,

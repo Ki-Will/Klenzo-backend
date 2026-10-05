@@ -188,17 +188,23 @@ export class ApprovalService {
   }
 
   /**
-   * Get pending approval requests.
+   * Get approval requests, optionally filtered by status and/or type.
    */
-  async getPendingRequests(type?: string) {
-    const where: Record<string, unknown> = { status: 'PENDING' };
+  async getPendingRequests(type?: string, status?: string) {
+    const where: Record<string, unknown> = {};
     if (type) where.type = type;
+    if (status) {
+      where.status = status.toUpperCase();
+    } else {
+      where.status = 'PENDING';
+    }
 
     return this.prisma.approvalRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
         requestedBy: { select: { id: true, name: true, email: true } },
+        approvedBy: { select: { id: true, name: true } },
       },
     });
   }

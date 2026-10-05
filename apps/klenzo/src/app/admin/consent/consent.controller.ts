@@ -90,19 +90,19 @@ export class ConsentAdminController {
   // ─── Policy Version Management ──────────────────────────────────────────
 
   @Get('policies')
-  @RequirePermissions('platform.settings_read')
+  @RequirePermissions('platform.settings.read')
   getAllPolicies(@Query('type') type?: string) {
     return this.consentService.getAllPolicyVersions(type);
   }
 
   @Get('policies/:type/latest')
-  @RequirePermissions('platform.settings_read')
+  @RequirePermissions('platform.settings.read')
   getLatestPolicy(@Param('type') type: string) {
     return this.consentService.getLatestPolicyVersion(type);
   }
 
   @Post('policies')
-  @RequirePermissions('platform.settings_manage')
+  @RequirePermissions('platform.settings.manage')
   @HttpCode(HttpStatus.CREATED)
   createPolicyVersion(
     @Body()

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PERMISSION_CATALOG, ROLE_DEFINITIONS } from './permissions.catalog';
@@ -16,13 +17,27 @@ const PERMISSION_CACHE_PREFIX = 'rbac:perms:';
 const PERMISSION_CACHE_TTL = 300; // 5 minutes
 
 @Injectable()
-export class RbacService {
+export class RbacService implements OnModuleInit {
   private readonly logger = new Logger(RbacService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
   ) {}
+
+  /**
+   * Auto-seed system roles + permissions on boot so the authorization
+   * system is always available. Idempotent; never blocks startup.
+   */
+  async onModuleInit() {
+    try {
+      await this.seed();
+    } catch (err) {
+      this.logger.warn(
+        `RBAC auto-seed skipped (migration may not be applied yet): ${String(err)}`,
+      );
+    }
+  }
 
   // ─── Seed (Idempotent) ──────────────────────────────────────────────────
 
@@ -57,9 +72,10 @@ export class RbacService {
         },
       });
 
+      // Split only on the first dot: "finance.reports.read" → resource "finance", action "reports.read"
       const permissionPairs = roleDef.permissions.map((p) => {
-        const [resource, action] = p.split('.');
-        return { resource, action };
+        const idx = p.indexOf('.');
+        return { resource: p.slice(0, idx), action: p.slice(idx + 1) };
       });
 
       const permissions = await this.prisma.permission.findMany({
@@ -436,6 +452,26 @@ export class RbacService {
     });
 
     const permSet = new Set<string>();
+
+    // Legacy fallback: admins created before RBAC existed have no AdminUserRole
+    // assignment. Map their legacy User.role so they are not locked out.
+    // Transition behavior: both legacy admin roles resolve to the SUPER_ADMIN
+    // permission set until they are assigned explicit RBAC roles.
+    if (assignments.length === 0) {
+      const legacyUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      });
+      // Case-insensitive: seed data historically used 'admin'/'superadmin'
+      // while the Prisma enum uses 'ADMIN'/'SUPERADMIN'.
+      const legacyRole = String(legacyUser?.role ?? '').toUpperCase();
+      if (legacyRole === 'ADMIN' || legacyRole === 'SUPERADMIN') {
+        for (const perm of PERMISSION_CATALOG) {
+          permSet.add(`${perm.resource}.${perm.action}`);
+        }
+        return Array.from(permSet).sort(); // deliberately uncached: no role assignments to invalidate
+      }
+    }
     for (const assignment of assignments) {
       for (const rp of assignment.role.permissions) {
         permSet.add(`${rp.permission.resource}.${rp.permission.action}`);
