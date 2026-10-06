@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { NotificationService } from '../notification/notification.service';
 import { RedisService } from '../redis/redis.service';
+import { MfaService } from './mfa.service';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
@@ -13,6 +14,7 @@ describe('AuthService', () => {
   let jwtMock: any;
   let notificationMock: any;
   let redisMock: any;
+  let mfaMock: any;
 
   beforeEach(async () => {
     prismaMock = {
@@ -37,6 +39,14 @@ describe('AuthService', () => {
       set: jest.fn(),
     };
 
+    mfaMock = {
+      verifyChallenge: jest.fn(),
+      status: jest.fn(),
+      setup: jest.fn(),
+      enable: jest.fn(),
+      disable: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -44,6 +54,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtMock },
         { provide: NotificationService, useValue: notificationMock },
         { provide: RedisService, useValue: redisMock },
+        { provide: MfaService, useValue: mfaMock },
       ],
     }).compile();
 
@@ -65,12 +76,15 @@ describe('AuthService', () => {
 
     it('should register a new user successfully and return tokens', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
-      prismaMock.user.create.mockImplementation(({ data }) => Promise.resolve({
-        id: 'user-123',
-        email: data.email,
-        passwordHash: data.passwordHash,
-        role: 'USER',
-      }));
+      prismaMock.user.create.mockImplementation(
+        ({ data }: { data: { email: string; passwordHash: string } }) =>
+          Promise.resolve({
+            id: 'user-123',
+            email: data.email,
+            passwordHash: data.passwordHash,
+            role: 'USER',
+          }),
+      );
       prismaMock.user.update.mockResolvedValue({});
 
       const result = await service.register({ email: 'new@klenzo.com', password: 'password123' });

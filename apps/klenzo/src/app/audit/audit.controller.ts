@@ -7,11 +7,11 @@ import {
   HttpCode,
 } from '@nestjs/common';
 import { AuditService } from './audit.service';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { PermissionGuard } from '../../common/guards/permissions.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { PermissionGuard } from '../common/guards/permissions.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
 
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
 @Roles('admin', 'superadmin')

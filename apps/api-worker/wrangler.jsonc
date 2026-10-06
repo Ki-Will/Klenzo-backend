@@ -1,0 +1,90 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Worker name — must be unique within your Cloudflare account.
+  "name": "klenzo-api-worker",
+
+  // Entry point — Wrangler bundles from here.
+  "main": "src/index.ts",
+
+  // Minimum compatibility date.  Bump this periodically after testing.
+  "compatibility_date": "2024-01-01",
+
+  // Enable Node.js built-in polyfills (needed by some Hono internals and
+  // for packages that reference `crypto`, `buffer`, etc.).
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Variables available as env.<VAR> in the Worker.
+  // Secrets (JWT_SECRET, etc.) must be set via `wrangler secret put`
+  // — never commit real values here.
+  "vars": {
+    "ENVIRONMENT": "development"
+  },
+
+  // ---------------------------------------------------------------------------
+  // Service bindings
+  // ---------------------------------------------------------------------------
+  // Uncomment once the auth-worker is deployed.
+  //
+  // "services": [
+  //   {
+  //     "binding": "AUTH_WORKER",
+  //     "service": "klenzo-auth-worker",
+  //     "environment": "production"
+  //   }
+  // ],
+
+  // ---------------------------------------------------------------------------
+  // KV Namespaces (add when needed)
+  // ---------------------------------------------------------------------------
+  // "kv_namespaces": [
+  //   { "binding": "CACHE_KV", "id": "<KV_NAMESPACE_ID>" }
+  // ],
+
+  // ---------------------------------------------------------------------------
+  // R2 Buckets (add when needed)
+  // ---------------------------------------------------------------------------
+  // "r2_buckets": [
+  //   { "binding": "UPLOADS_BUCKET", "bucket_name": "klenzo-uploads" }
+  // ],
+
+  // ---------------------------------------------------------------------------
+  // Hyperdrive (add when needed)
+  // ---------------------------------------------------------------------------
+  // "hyperdrive": [
+  //   { "binding": "DB", "id": "<HYPERDRIVE_CONFIG_ID>" }
+  // ],
+
+  // ---------------------------------------------------------------------------
+  // Observability
+  // ---------------------------------------------------------------------------
+  "observability": {
+    "enabled": true
+  },
+
+  // ---------------------------------------------------------------------------
+  // Production environment overrides
+  // ---------------------------------------------------------------------------
+  "env": {
+    "production": {
+      "name": "klenzo-api-worker",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+      // Services, KV, R2, Hyperdrive bindings for production go here, e.g.:
+      // "services": [
+      //   {
+      //     "binding": "AUTH_WORKER",
+      //     "service": "klenzo-auth-worker",
+      //     "environment": "production"
+      //   }
+      // ]
+    },
+    "staging": {
+      "name": "klenzo-api-worker-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    }
+  }
+}

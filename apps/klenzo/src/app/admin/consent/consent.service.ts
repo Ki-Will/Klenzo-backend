@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConsentType } from '@prisma/client';
 
 export const CONSENT_TYPES = [
   { type: 'terms_of_service', required: true, revocable: false, description: 'Platform terms of service' },
@@ -37,7 +38,7 @@ export class ConsentService {
       where: {
         userId_consentType: {
           userId,
-          consentType,
+          consentType: consentType as ConsentType,
         },
       },
     });
@@ -168,14 +169,18 @@ export class ConsentService {
 
     if (latestTerms) {
       const hasTerms = userConsents.some(
-        (c) => c.consentType === 'terms_of_service' && c.version === latestTerms.version,
+        (c) =>
+          c.consentType === 'TERMS_OF_SERVICE' &&
+          c.version === latestTerms.version,
       );
       if (!hasTerms) missingConsents.push('terms_of_service');
     }
 
     if (latestPrivacy) {
       const hasPrivacy = userConsents.some(
-        (c) => c.consentType === 'privacy_policy' && c.version === latestPrivacy.version,
+        (c) =>
+          c.consentType === 'PRIVACY_POLICY' &&
+          c.version === latestPrivacy.version,
       );
       if (!hasPrivacy) missingConsents.push('privacy_policy');
     }

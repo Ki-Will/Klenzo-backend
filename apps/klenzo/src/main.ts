@@ -114,7 +114,6 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
-      forbidNonWhitelisted: true,
       disableErrorMessages: process.env.NODE_ENV === 'production',
     }),
   );

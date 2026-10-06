@@ -1,0 +1,143 @@
+{
+  "name": "api-worker",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-worker/src",
+  "projectType": "application",
+  "tags": [
+    "scope:api",
+    "type:cloudflare-worker",
+    "runtime:workerd"
+  ],
+  "targets": {
+    // -------------------------------------------------------------------------
+    // build — type-check + bundle via Wrangler (no Node output, CF bundle only)
+    // -------------------------------------------------------------------------
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/api-worker"],
+      "options": {
+        "command": "wrangler deploy --dry-run --outdir ../../dist/apps/api-worker",
+        "cwd": "apps/api-worker"
+      },
+      "configurations": {
+        "development": {
+          "command": "wrangler deploy --dry-run --outdir ../../dist/apps/api-worker --env development",
+          "cwd": "apps/api-worker"
+        },
+        "production": {
+          "command": "wrangler deploy --dry-run --outdir ../../dist/apps/api-worker --env production",
+          "cwd": "apps/api-worker"
+        }
+      },
+      "cache": true
+    },
+
+    // -------------------------------------------------------------------------
+    // typecheck — run tsc without emitting to catch type errors fast
+    // -------------------------------------------------------------------------
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/api-worker/tsconfig.app.json --noEmit"
+      },
+      "cache": true
+    },
+
+    // -------------------------------------------------------------------------
+    // test — vitest with @cloudflare/vitest-pool-workers (Workers runtime)
+    // -------------------------------------------------------------------------
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "apps/api-worker"
+      },
+      "configurations": {
+        "watch": {
+          "command": "vitest",
+          "cwd": "apps/api-worker"
+        },
+        "coverage": {
+          "command": "vitest run --coverage",
+          "cwd": "apps/api-worker"
+        }
+      },
+      "cache": true
+    },
+
+    // -------------------------------------------------------------------------
+    // test:node — Jest for pure-Node utility tests (*.node.spec.ts)
+    // -------------------------------------------------------------------------
+    "test:node": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/api-worker"],
+      "options": {
+        "jestConfig": "apps/api-worker/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+
+    // -------------------------------------------------------------------------
+    // lint
+    // -------------------------------------------------------------------------
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["apps/api-worker/**/*.ts"]
+      }
+    },
+
+    // -------------------------------------------------------------------------
+    // serve — local dev server via wrangler dev
+    // -------------------------------------------------------------------------
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wrangler dev --port 8787",
+        "cwd": "apps/api-worker"
+      },
+      "configurations": {
+        "development": {
+          "command": "wrangler dev --port 8787 --env development",
+          "cwd": "apps/api-worker"
+        }
+      },
+      "cache": false
+    },
+
+    // -------------------------------------------------------------------------
+    // deploy — publish to Cloudflare
+    // -------------------------------------------------------------------------
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wrangler deploy",
+        "cwd": "apps/api-worker"
+      },
+      "configurations": {
+        "production": {
+          "command": "wrangler deploy --env production",
+          "cwd": "apps/api-worker"
+        },
+        "staging": {
+          "command": "wrangler deploy --env staging",
+          "cwd": "apps/api-worker"
+        }
+      },
+      "cache": false
+    },
+
+    // -------------------------------------------------------------------------
+    // tail — stream live logs from the deployed Worker
+    // -------------------------------------------------------------------------
+    "tail": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wrangler tail klenzo-api-worker",
+        "cwd": "apps/api-worker"
+      },
+      "cache": false
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import * as CircuitBreaker from 'opossum';
+import CircuitBreaker from 'opossum';
 
 /**
  * Circuit breaker options for gRPC calls.

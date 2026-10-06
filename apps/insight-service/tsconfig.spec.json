@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["jest", "node"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "../../apps/klenzo/src/app/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -39,6 +39,7 @@ describe('FinanceService', () => {
 
     insightMock = {
       generateInsights: jest.fn(),
+      invalidateDashboard: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({

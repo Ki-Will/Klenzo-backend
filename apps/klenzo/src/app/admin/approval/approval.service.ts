@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
+import { Prisma } from '@prisma/client';
 
 /**
  * Approval Workflow Service
@@ -42,7 +43,7 @@ export class ApprovalService {
         requestedById: params.requestedById,
         targetType: params.targetType,
         targetId: params.targetId,
-        payload: params.payload,
+        payload: params.payload as Prisma.InputJsonValue,
         reason: params.reason,
         expiresAt: params.expiresAt,
       },

@@ -15,6 +15,7 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@klenzo/*": ["libs/*/src"],
       "@config/*": ["apps/klenzo/src/app/config/*"],
       "@prisma/*": ["apps/klenzo/src/app/prisma/*"],
       "@redis/*": ["apps/klenzo/src/app/redis/*"],

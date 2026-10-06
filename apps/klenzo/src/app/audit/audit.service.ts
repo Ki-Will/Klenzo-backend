@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 
 export interface AuditLogEntry {
@@ -55,7 +56,7 @@ export class AuditService {
           action: entry.action,
           targetType: entry.targetType,
           targetId: entry.targetId,
-          metadata: entry.metadata ?? undefined,
+          metadata: entry.metadata as Prisma.InputJsonValue | undefined,
           ipAddress: entry.ipAddress,
           requestPath: entry.requestPath,
           result: entry.result ?? 'SUCCESS',

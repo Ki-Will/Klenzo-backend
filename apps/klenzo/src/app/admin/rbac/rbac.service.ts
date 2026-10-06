@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PERMISSION_CATALOG, ROLE_DEFINITIONS } from './permissions.catalog';
-import { AdminRoleCode } from '@prisma/client';
+import { AdminRoleCode, Prisma } from '@prisma/client';
 import { RedisService } from '../../redis/redis.service';
 import * as crypto from 'crypto';
 
@@ -432,9 +432,9 @@ export class RbacService implements OnModuleInit {
     // Check cache first
     const cacheKey = `${PERMISSION_CACHE_PREFIX}${userId}`;
     try {
-      const cached = await this.redis.get(cacheKey);
+      const cached = await this.redis.get<string[]>(cacheKey);
       if (cached) {
-        return JSON.parse(cached) as string[];
+        return cached;
       }
     } catch {
       // Redis unavailable — fall through to DB
@@ -482,7 +482,7 @@ export class RbacService implements OnModuleInit {
 
     // Cache for future requests
     try {
-      await this.redis.set(cacheKey, JSON.stringify(permissions), 'EX', PERMISSION_CACHE_TTL);
+      await this.redis.set(cacheKey, permissions, PERMISSION_CACHE_TTL);
     } catch {
       // Redis unavailable — not critical
     }
@@ -561,7 +561,7 @@ export class RbacService implements OnModuleInit {
           action,
           targetType,
           targetId,
-          metadata,
+          metadata: metadata as Prisma.InputJsonValue,
           result: 'SUCCESS',
           checksum,
           previousChecksum,

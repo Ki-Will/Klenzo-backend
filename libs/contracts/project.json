@@ -1,0 +1,25 @@
+{
+  "name": "contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/contracts/src",
+  "projectType": "library",
+  "tags": ["scope:contracts", "type:lib"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --project libs/contracts/tsconfig.json",
+        "cwd": "{workspaceRoot}"
+      },
+      "cache": true
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/contracts"],
+      "options": {
+        "jestConfig": "libs/contracts/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

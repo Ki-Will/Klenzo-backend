@@ -364,6 +364,31 @@ export class AuthService {
     return safe;
   }
 
+  // ─── Sessions ─────────────────────────────────────────────────────────────
+
+  async getSessions(userId: string) {
+    const userSessions = this.sessions.get(userId) || [];
+    return userSessions.map((s, idx) => ({
+      id: s.id,
+      device: s.device,
+      location: s.location,
+      lastSeen: s.lastSeen,
+      isCurrent: idx === userSessions.length - 1,
+    }));
+  }
+
+  async revokeSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ success: boolean }> {
+    const existing = this.sessions.get(userId) || [];
+    this.sessions.set(
+      userId,
+      existing.filter((s) => s.id !== sessionId),
+    );
+    return { success: true };
+  }
+
   private async generateRefreshToken(userId: string): Promise<string> {
     const token = crypto.randomBytes(40).toString('hex');
     const hashed = crypto.createHash('sha256').update(token).digest('hex');

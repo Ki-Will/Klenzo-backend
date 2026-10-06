@@ -1,0 +1,17 @@
+{
+  "name": "events",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/events/src",
+  "projectType": "library",
+  "tags": ["scope:events", "type:lib"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --project libs/events/tsconfig.json",
+        "cwd": "{workspaceRoot}"
+      },
+      "cache": true
+    }
+  }
+}

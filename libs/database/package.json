@@ -1,0 +1,15 @@
+{
+  "name": "@klenzo/database",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.4.2",
+    "pg": "^8.23.0"
+  }
+}

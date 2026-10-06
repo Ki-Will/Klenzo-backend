@@ -123,6 +123,11 @@ export class AuthController {
     try {
       const result = await this.authService.login(dto, device);
 
+      // MFA enabled → second factor required; no tokens issued yet.
+      if ('mfaRequired' in result) {
+        return { mfaRequired: true as const, mfaToken: result.mfaToken };
+      }
+
       console.log(`[Auth] Login success: ${dto.email}`);
 
       // ACCESS TOKEN
@@ -316,7 +321,7 @@ export class AuthController {
     try {
       const result = await this.googleOAuth.callback(code, state, device);
 
-      if ('mfaRequired' in result && result.mfaRequired) {
+      if ('mfaRequired' in result) {
         const target = new URL(`${frontendUrl}/oauth/callback`);
         target.searchParams.set('status', 'mfa_required');
         target.searchParams.set('token', result.mfaToken);
@@ -365,7 +370,7 @@ export class AuthController {
       device,
     );
 
-    if ('mfaRequired' in result && result.mfaRequired) {
+    if ('mfaRequired' in result) {
       return { mfaRequired: true as const, mfaToken: result.mfaToken };
     }
 

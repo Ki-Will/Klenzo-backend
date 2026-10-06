@@ -1,0 +1,25 @@
+{
+  "name": "validation",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/validation/src",
+  "projectType": "library",
+  "tags": ["scope:validation", "type:lib"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --project libs/validation/tsconfig.json",
+        "cwd": "{workspaceRoot}"
+      },
+      "cache": true
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/validation"],
+      "options": {
+        "jestConfig": "libs/validation/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

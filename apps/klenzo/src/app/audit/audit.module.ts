@@ -5,8 +5,8 @@ import { AuditController } from './audit.controller';
 import { AuditInterceptor } from './audit.interceptor';
 import { FinanceEventService } from './finance-event.service';
 import { FinanceEventEnricherService } from './finance-event-enricher.service';
-import { PrismaModule } from '../../prisma/prisma.module';
-import { RbacModule } from '../rbac/rbac.module';
+import { PrismaModule } from '../prisma/prisma.module';
+import { RbacModule } from '../admin/rbac/rbac.module';
 
 @Module({
   imports: [PrismaModule, RbacModule],

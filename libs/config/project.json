@@ -1,0 +1,17 @@
+{
+  "name": "config",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/config/src",
+  "projectType": "library",
+  "tags": ["scope:config", "type:lib"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --project libs/config/tsconfig.json",
+        "cwd": "{workspaceRoot}"
+      },
+      "cache": true
+    }
+  }
+}
