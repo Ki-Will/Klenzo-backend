@@ -60,7 +60,7 @@ export class ConsentService {
     return this.prisma.consentRecord.create({
       data: {
         userId,
-        consentType: consentType as any,
+        consentType: consentType as ConsentType,
         version,
         granted,
         ipAddress,
@@ -84,7 +84,7 @@ export class ConsentService {
     const activeConsent = await this.prisma.consentRecord.findFirst({
       where: {
         userId,
-        consentType: consentType as any,
+        consentType: consentType as ConsentType,
         revokedAt: null,
       },
     });
@@ -170,7 +170,7 @@ export class ConsentService {
     if (latestTerms) {
       const hasTerms = userConsents.some(
         (c) =>
-          c.consentType === 'TERMS_OF_SERVICE' &&
+          c.consentType === 'terms_of_service' &&
           c.version === latestTerms.version,
       );
       if (!hasTerms) missingConsents.push('terms_of_service');
@@ -179,7 +179,7 @@ export class ConsentService {
     if (latestPrivacy) {
       const hasPrivacy = userConsents.some(
         (c) =>
-          c.consentType === 'PRIVACY_POLICY' &&
+          c.consentType === 'privacy_policy' &&
           c.version === latestPrivacy.version,
       );
       if (!hasPrivacy) missingConsents.push('privacy_policy');

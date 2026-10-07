@@ -323,11 +323,22 @@ model AdminUserRole {
 // ── CONSENT SCHEMA (AUTH) ───────────────────────────────────────────────
 
 enum ConsentType {
+  // Legacy values (uppercase) — retained so any existing rows keep validating.
   PRIVACY_POLICY
   TERMS_OF_SERVICE
   MARKETING
   ANALYTICS
   DATA_SHARING
+
+  // App-level consent types (snake_case) — matches CONSENT_TYPES in
+  // apps/klenzo/src/app/admin/consent/consent.service.ts and the public API.
+  terms_of_service
+  privacy_policy
+  marketing_email
+  marketing_sms
+  push_notifications
+  analytics
+  data_sharing_partners
 
   @@schema("auth")
 }

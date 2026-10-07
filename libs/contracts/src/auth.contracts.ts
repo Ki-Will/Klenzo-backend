@@ -1,5 +1,9 @@
-// Auth Service RPC Contracts
-// Mirrors the gRPC service definitions in libs/proto/auth.proto
+// Auth Service Contracts
+//
+// ValidateToken*/GetUserProfile* mirror the gRPC messages in
+// libs/proto/auth.proto (source of truth for the gRPC surface).
+// Register/Login/Refresh/Profile messages model the shared HTTP/Worker API
+// surface and have no proto counterpart yet.
 
 export interface UserSummary {
   id: string;
@@ -50,15 +54,17 @@ export interface LoginResponse {
   expiresIn: number;
 }
 
-// Token validation
+// Token validation — mirrors auth.proto ValidateToken{Request,Response}
 export interface ValidateTokenRequest {
   token: string;
 }
 
 export interface ValidateTokenResponse {
-  valid: boolean;
-  claims: AuthClaims | null;
-  error?: string;
+  isValid: boolean;
+  userId: string;
+  email: string;
+  role: string;
+  isActive: boolean;
 }
 
 // Refresh token
@@ -72,13 +78,20 @@ export interface RefreshTokenResponse {
   expiresIn: number;
 }
 
-// Get user
-export interface GetUserRequest {
+// Get user profile — mirrors auth.proto GetUserProfile{Request,Response}
+export interface GetUserProfileRequest {
   userId: string;
 }
 
-export interface GetUserResponse {
-  user: UserSummary;
+export interface GetUserProfileResponse {
+  id: string;
+  email: string;
+  name: string;
+  phone: string;
+  avatar: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 // Update profile

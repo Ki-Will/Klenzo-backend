@@ -8,8 +8,8 @@ import type {
   LoginResponse,
   ValidateTokenRequest,
   ValidateTokenResponse,
-  GetUserRequest,
-  GetUserResponse,
+  GetUserProfileRequest,
+  GetUserProfileResponse,
   RefreshTokenRequest,
   RefreshTokenResponse,
   LogoutRequest,
@@ -87,7 +87,7 @@ export interface AuthWorkerBinding {
   login(req: LoginRequest): Promise<LoginResponse>;
   validateToken(req: ValidateTokenRequest): Promise<ValidateTokenResponse>;
   refreshToken(req: RefreshTokenRequest): Promise<RefreshTokenResponse>;
-  getUser(req: GetUserRequest): Promise<GetUserResponse>;
+  getUserProfile(req: GetUserProfileRequest): Promise<GetUserProfileResponse>;
   logout(req: LogoutRequest): Promise<LogoutResponse>;
   // Standard Worker fetch for HTTP requests
   fetch(request: Request): Promise<Response>;

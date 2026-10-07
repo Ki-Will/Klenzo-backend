@@ -239,11 +239,17 @@ describe('auth contracts', () => {
     expect(JSON.parse(JSON.stringify(req))).toEqual(req);
   });
 
-  it('serializes an invalid-token ValidateTokenResponse with null claims', () => {
-    const res: ValidateTokenResponse = { valid: false, claims: null, error: 'expired' };
+  it('serializes an invalid-token ValidateTokenResponse (proto parity)', () => {
+    const res: ValidateTokenResponse = {
+      isValid: false,
+      userId: '',
+      email: '',
+      role: '',
+      isActive: false,
+    };
     const restored = JSON.parse(JSON.stringify(res)) as ValidateTokenResponse;
-    expect(restored.valid).toBe(false);
-    expect(restored.claims).toBeNull();
-    expect(restored.error).toBe('expired');
+    expect(restored.isValid).toBe(false);
+    expect(restored.userId).toBe('');
+    expect(restored.isActive).toBe(false);
   });
 });
