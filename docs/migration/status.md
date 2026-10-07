@@ -1,6 +1,6 @@
 # Migration Status — Klenzoo Backend (NestJS → Cloudflare Workers)
 
-> **Last updated:** 2026-10-06
+> **Last updated:** 2026-10-07
 > **Source of truth:** [`KLENZOO_$0_FIRST_MICROSERVICE_MIGRATION.md`](../../KLENZOO_$0_FIRST_MICROSERVICE_MIGRATION.md) (implementation contract)
 > **Companion docs:** [`migration-matrix.md`](../architecture/migration-matrix.md), [`current.md`](../architecture/current.md), [`target.md`](../architecture/target.md), [`service-boundaries.md`](../architecture/service-boundaries.md)
 
@@ -11,8 +11,8 @@
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Architecture freeze & repository cleanup | ✅ Complete (baseline repaired — see §3) |
-| 1 | Worker platform (`api-worker`) | 🟡 Scaffolded: Hono app, health/version, request ID, logging, error shape — 10 tests pass |
-| 2 | Shared contracts & runtime compatibility | 🟡 Shared libs written and tested; NestJS apps still do not consume them |
+| 1 | Worker platform (`api-worker`) | 🟡 Scaffolded: Hono app, health/version, request ID, logging, error shape — 14 tests pass |
+| 2 | Shared contracts & runtime compatibility | ✅ Shared libs written + tested; NestJS `auth-service` now consumes `@klenzo/contracts` (proto-parity); Worker code has zero NestJS imports (exit gate met) |
 | 3 | PostgreSQL + Hyperdrive | 🟡 `libs/database` client/transaction/error layer written + tested (23 tests); no live Hyperdrive binding yet |
 | 4 | Authentication Worker | 🔲 Not started |
 | 5 | gRPC → Service Bindings | 🔲 Not started |
@@ -29,17 +29,17 @@
 
 ## 2. Gate status
 
-Verified on 2026-10-06 (Linux host) unless noted.
+Verified on 2026-10-07 (Linux host) unless noted.
 
 | Gate | Command | Status |
 |---|---|---|
 | Typecheck — all 7 projects | `npm run typecheck` | ✅ Green (0 errors) |
-| Unit tests — 10 projects, 136 tests | `npx nx run-many -t test` | ✅ Green (see flakiness note, §4.2) |
+| Unit tests — 10 projects, 140 tests | `npx nx run-many -t test` | ✅ Green (2026-10-07) |
 | Lint — migration projects | `npx nx run-many -t lint -p api-worker validation contracts database auth config events shared` | ✅ Green (2026-10-05) |
-| Worker smoke test | `npx nx test api-worker` | ✅ 10 tests (2026-10-06) |
-| Prisma validation | `npx prisma validate` | ✅ (2026-10-05) |
+| Worker smoke test | `npx nx test api-worker` | ✅ 14 tests (2026-10-07, §4.5 patch applied) |
+| Prisma validation | `npx prisma validate` | ✅ (2026-10-07) |
 
-Test breakdown: `api-worker` 10 · `database` 23 · `validation` 51 · `contracts` 10 · six NestJS services × 7 = 42.
+Test breakdown: `api-worker` 14 · `database` 23 · `validation` 51 · `contracts` 10 · six NestJS services × 7 = 42.
 
 ---
 
@@ -55,15 +55,13 @@ The legacy NestJS typecheck baseline was red at the start of this workstream. It
 
 ## 4. Known issues / debt
 
-### 4.1 Consent feature: app ↔ schema drift (runtime, needs decision)
+### 4.1 Consent feature: app ↔ schema drift — ✅ RESOLVED (2026-10-07)
 
-`CONSENT_TYPES` in `apps/klenzo/src/app/admin/consent/consent.service.ts` uses snake_case app values (`terms_of_service`, `marketing_email`, `marketing_sms`, `push_notifications`, `data_sharing_partners`) while the Prisma/PostgreSQL enum `auth."ConsentType"` is `PRIVACY_POLICY, TERMS_OF_SERVICE, MARKETING, ANALYTICS, DATA_SHARING`. Consequences:
+The Prisma/PostgreSQL enum `auth."ConsentType"` now carries both the legacy uppercase values and the 7 snake_case app values (`terms_of_service`, `privacy_policy`, `marketing_email`, `marketing_sms`, `push_notifications`, `analytics`, `data_sharing_partners`) — additive migration `prisma/migrations/20261006_add_app_consent_types/` (`ALTER TYPE ... ADD VALUE IF NOT EXISTS`, safe on existing data; PG15 cannot run it inside a transaction — `prisma migrate deploy` handles this).
 
-- `recordConsent`/`revokeConsent` write via `consentType as any` → PostgreSQL rejects the snake_case values at insert time.
-- The sets do not map 1:1 (two marketing types vs one enum value, `push_notifications` has no enum value), and `userId_consentType` is unique — so a mapping decision or a schema migration is required.
-- `checkPolicyConsent` comparisons were aligned to the DB enum (`TERMS_OF_SERVICE`/`PRIVACY_POLICY`) during the typecheck repair; they can only ever match rows the DB can actually store.
-
-**Not fixed by typecheck work — requires a product/schema decision (extend enum vs map at persistence).**
+- `recordConsent`/`revokeConsent` casts are now typed (`as ConsentType`, no `as any`).
+- `checkPolicyConsent` compares against the snake_case values the app actually writes — previously (after the typecheck repair aligned them to uppercase) the comparisons could never match any stored row.
+- The sets still do not map 1:1 (two marketing types + push vs one legacy `MARKETING`); no mapping decision needed anymore since the enum accepts all app values directly.
 
 ### 4.2 Test flakiness under full parallel runs
 
@@ -96,11 +94,13 @@ if (rawSpecifier !== null && rawSpecifier.startsWith("file:")) {
 
 **⚠️ This patch lives only in `node_modules` and is wiped by every `npm install`.** Re-apply after any reinstall (or move the repo to a path without spaces, or upgrade vitest + `@cloudflare/vitest-pool-workers` past #14152).
 
+Re-applied on 2026-10-07 after the full `npm install` (which completed cleanly, `exit 0`; `package-lock.json` churn was CRLF-only and normalized).
+
 ---
 
 ## 5. Next actions (in contract order)
 
 1. Exit-gate verification for Phase 0/1: deployed `api-worker` smoke test against a live environment (requires wrangler credentials).
-2. Phase 2: make at least one NestJS service consume `@klenzo/contracts`/`@klenzo/validation` to prove the shared-lib layer is usable from both runtimes.
+2. ✅ Phase 2 done (2026-10-07): `auth-service` consumes `@klenzo/contracts` with proto-parity types; Worker/shared libs have zero NestJS imports.
 3. Phase 3: Hyperdrive binding + vertical database slice test (no schema changes).
-4. Resolve §4.1 consent drift before any auth-phase migration work touches consent flows.
+4. ✅ §4.1 consent drift resolved (2026-10-07) — enum extended, migration `20261006_add_app_consent_types` pending deploy.
