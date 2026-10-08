@@ -51,7 +51,9 @@ async function deriveKey(
   return crypto.subtle.deriveBits(
     {
       name: ALGORITHM,
-      salt,
+      // Copy into a fresh ArrayBuffer-backed view: newer TS lib types reject
+      // Uint8Array<ArrayBufferLike> where BufferSource is expected.
+      salt: new Uint8Array(salt),
       iterations,
       hash: HASH_ALGO,
     },

@@ -1,0 +1,63 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Worker name — must be unique within your Cloudflare account.
+  "name": "klenzo-auth-worker",
+
+  // Entry point — Wrangler bundles from here.
+  "main": "src/index.ts",
+
+  // Compatibility date: >= 2024-09-23 is required so the pg driver's
+  // unprefixed Node builtin requires (fs, stream, net) resolve against the
+  // nodejs_compat polyfills when @klenzo/database is bundled.
+  "compatibility_date": "2024-09-23",
+
+  // Enable Node.js built-in polyfills (bcryptjs and some Hono internals
+  // reference Node globals).
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Variables available as env.<VAR> in the Worker.
+  // Secrets must be set via `wrangler secret put` — never commit real values:
+  //   JWT_SECRET  — HS256 secret for access tokens (fallback: legacy 'KlenzoSecret')
+  //   RPC_SECRET  — shared secret required by /rpc/* service-to-service routes
+  //                 (routes fail closed when unset)
+  "vars": {
+    "ENVIRONMENT": "development"
+  },
+
+  // ---------------------------------------------------------------------------
+  // Hyperdrive — the auth worker's only dependency is PostgreSQL.
+  // Add once Hyperdrive is provisioned ($0 tier):
+  // "hyperdrive": [
+  //   { "binding": "DB", "id": "<HYPERDRIVE_CONFIG_ID>" }
+  // ],
+  //
+  // Until then set a DATABASE_URL secret:
+  //   wrangler secret put DATABASE_URL
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // Observability
+  // ---------------------------------------------------------------------------
+  "observability": {
+    "enabled": true
+  },
+
+  // ---------------------------------------------------------------------------
+  // Production environment overrides
+  // ---------------------------------------------------------------------------
+  "env": {
+    "production": {
+      "name": "klenzo-auth-worker",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+    },
+    "staging": {
+      "name": "klenzo-auth-worker-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    }
+  }
+}

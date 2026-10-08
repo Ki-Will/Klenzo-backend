@@ -1,6 +1,6 @@
 # Migration Status — Klenzoo Backend (NestJS → Cloudflare Workers)
 
-> **Last updated:** 2026-10-07
+> **Last updated:** 2026-10-08
 > **Source of truth:** [`KLENZOO_$0_FIRST_MICROSERVICE_MIGRATION.md`](../../KLENZOO_$0_FIRST_MICROSERVICE_MIGRATION.md) (implementation contract)
 > **Companion docs:** [`migration-matrix.md`](../architecture/migration-matrix.md), [`current.md`](../architecture/current.md), [`target.md`](../architecture/target.md), [`service-boundaries.md`](../architecture/service-boundaries.md)
 
@@ -13,9 +13,9 @@
 | 0 | Architecture freeze & repository cleanup | ✅ Complete (baseline repaired — see §3) |
 | 1 | Worker platform (`api-worker`) | 🟡 Scaffolded: Hono app, health/version, request ID, logging, error shape — 14 tests pass |
 | 2 | Shared contracts & runtime compatibility | ✅ Shared libs written + tested; NestJS `auth-service` now consumes `@klenzo/contracts` (proto-parity); Worker code has zero NestJS imports (exit gate met) |
-| 3 | PostgreSQL + Hyperdrive | 🟡 `libs/database` client/transaction/error layer written + tested (23 tests); no live Hyperdrive binding yet |
-| 4 | Authentication Worker | 🔲 Not started |
-| 5 | gRPC → Service Bindings | 🔲 Not started |
+| 3 | PostgreSQL + Hyperdrive | ✅ Migrations all deploy (9/9) against local PG 17.5; vertical slice test green (connection, 7-schema reads, write/delete, commit/rollback, finance triggers, audit rows) — 6 tests, opt-in via `KLENZO_SLICE_DB_URL`. 🟡 Hyperdrive binding still pending (needs deployed env) |
+| 4 | Authentication Worker | ✅ `apps/auth-worker` built: legacy-parity register/login/login-mfa/refresh/logout/profile + guarded `/rpc/*` (Hono, bcryptjs↔legacy bcrypt, kz_at/kz_rt cookies, legacy error bodies) — 63 tests, typecheck + `wrangler --dry-run` green |
+| 5 | gRPC → Service Bindings | ✅ api-worker proxies `/auth/*` + `/api/auth/*` over the `AUTH_WORKER` binding (503 legacy body when missing) and ships a typed RPC client (`validateToken`/`getUserProfile`, zod input+output validation, timeout, typed errors) — 22 new tests; no gRPC in any new path |
 | 6 | Finance Worker | 🔲 Not started |
 | 7 | Habit & Productivity Workers | 🔲 Not started |
 | 8 | Queues (replace BullMQ) | 🔲 Not started (queue message contracts typed in `libs/contracts`) |
@@ -33,13 +33,18 @@ Verified on 2026-10-07 (Linux host) unless noted.
 
 | Gate | Command | Status |
 |---|---|---|
-| Typecheck — all 7 projects | `npm run typecheck` | ✅ Green (0 errors) |
-| Unit tests — 10 projects, 140 tests | `npx nx run-many -t test` | ✅ Green (2026-10-07) |
+| Typecheck — all 7 legacy projects | `npm run typecheck` | ✅ Green (0 errors, 2026-10-08) |
+| Typecheck — all 16 projects (incl. workers + libs) | `npx nx run-many -t typecheck` | ✅ Green (2026-10-08) |
+| Unit tests — 11 projects, 231 tests (6 DB-slice tests skip without `KLENZO_SLICE_DB_URL`) | `npx nx run-many -t test` | ✅ Green (2026-10-08) |
 | Lint — migration projects | `npx nx run-many -t lint -p api-worker validation contracts database auth config events shared` | ✅ Green (2026-10-05) |
-| Worker smoke test | `npx nx test api-worker` | ✅ 14 tests (2026-10-07, §4.5 patch applied) |
-| Prisma validation | `npx prisma validate` | ✅ (2026-10-07) |
+| Worker smoke test — api-worker | `npx nx test api-worker` | ✅ 36 tests (2026-10-08, §4.5 patch applied) |
+| Worker smoke test — auth-worker | `npx nx test auth-worker` | ✅ 63 tests (2026-10-08) |
+| Worker bundle — dry run | `wrangler deploy --dry-run` (both workers) | ✅ Green (2026-10-08) — auth-worker 4.75 MB / 1.42 MB gzip |
+| Prisma validation + generate | `npx prisma validate && npx prisma generate` | ✅ (2026-10-08) |
+| Migration deploy + status | `npx prisma migrate deploy` / `migrate status` | ✅ 9/9 migrations, DB up to date (2026-10-08) |
+| Migrations ↔ schema drift | `prisma migrate diff --from-migrations --to-schema` | ✅ Empty — migrations produce exactly `schema.prisma` |
 
-Test breakdown: `api-worker` 14 · `database` 23 · `validation` 51 · `contracts` 10 · six NestJS services × 7 = 42.
+Test breakdown: `auth-worker` 63 · `api-worker` 36 · `database` 29 (6 opt-in slice) · `validation` 51 · `contracts` 10 · six NestJS services × 7 = 42.
 
 ---
 
@@ -62,6 +67,8 @@ The Prisma/PostgreSQL enum `auth."ConsentType"` now carries both the legacy uppe
 - `recordConsent`/`revokeConsent` casts are now typed (`as ConsentType`, no `as any`).
 - `checkPolicyConsent` compares against the snake_case values the app actually writes — previously (after the typecheck repair aligned them to uppercase) the comparisons could never match any stored row.
 - The sets still do not map 1:1 (two marketing types + push vs one legacy `MARKETING`); no mapping decision needed anymore since the enum accepts all app values directly.
+
+> Deployed on 2026-10-08 via `prisma migrate deploy` (all 9 migrations green).
 
 ### 4.2 Test flakiness under full parallel runs
 
@@ -98,9 +105,24 @@ Re-applied on 2026-10-07 after the full `npm install` (which completed cleanly, 
 
 ---
 
+### 4.6 Migration-set repairs + accepted live-DB drift — ✅ (2026-10-08)
+
+Two migration defects were found and fixed while bringing Phase 3 up:
+
+1. **`20260918_add_financial_backbone` was committed as Prisma DSL, not SQL** (enum/model blocks in `migration.sql` — it could never execute on any database). Regenerated as real SQL via `prisma migrate diff`: 7 `CREATE TYPE` (finance enums), 4 `CREATE TABLE` (`ledger_entries`, `reconciliation_records`, `risk_assessments`, `approval_requests`), indexes, 8 `FOREIGN KEY` alterations. Deploys green.
+2. **`auth.users` was missing `googleId` / `mfaEnabled` / `mfaSecret`** — `schema.prisma` and the legacy runtime (MFA + Google OAuth) both use them, but no migration ever created them (surfaced by the Phase 3 slice test failing on `mfaEnabled`). Added forward migration `20261008_add_user_mfa_oauth_columns`.
+
+**Accepted live-DB drift (intentionally NOT migrated):** `prisma migrate diff --from-config-datasource --to-schema` still reports ~84 lines consisting only of *extra* legacy objects the Prisma schema does not model: 15 legacy single-column indexes (schema declares different/composite ones), a few `DEFAULT` clauses (`consent_records.id`, `policy_versions.id`, `feature_flags` array defaults), renamed FK/index names, and `finance_events` typed columns (UUID/TIMESTAMPTZ vs the schema's TEXT/TIMESTAMP mapping). Applying any of it would **drop legacy indexes or retype the audit table**, violating the Phase 3 constraint (“do not alter the database schema”). Column sets are in sync — 0 `ADD COLUMN` differences.
+
+---
+
 ## 5. Next actions (in contract order)
 
-1. Exit-gate verification for Phase 0/1: deployed `api-worker` smoke test against a live environment (requires wrangler credentials).
+1. Exit-gate verification for Phase 0/1: deployed `api-worker` smoke test against a live environment (requires wrangler credentials — `wrangler login`, $0 plan).
 2. ✅ Phase 2 done (2026-10-07): `auth-service` consumes `@klenzo/contracts` with proto-parity types; Worker/shared libs have zero NestJS imports.
-3. Phase 3: Hyperdrive binding + vertical database slice test (no schema changes).
-4. ✅ §4.1 consent drift resolved (2026-10-07) — enum extended, migration `20261006_add_app_consent_types` pending deploy.
+3. ✅ Phase 3 done locally (2026-10-08): all migrations deploy against local PG 17.5; vertical slice test green. Remaining: Hyperdrive binding in a deployed environment + run the slice through a real binding.
+4. ✅ Phase 4 done (2026-10-08): `auth-worker` implements the legacy auth contract (register/login/MFA/refresh/logout/profile) with 63 tests. Remaining for the exit gate: deploy both workers, point the frontend's `BACKEND_URL` (Next `/backend` rewrite) at api-worker, and verify login/register/refresh end-to-end in the browser.
+5. ✅ Phase 5 done (2026-10-08): auth traffic crosses the `AUTH_WORKER` service binding; typed RPC client with zod-validated contracts replaces the gRPC call pattern for new code.
+6. Next: Phase 6 (Finance Worker) — read/write through `libs/database` with transaction + trigger parity tests.
+
+Outstanding secrets/bindings (deployment step, not code): `JWT_SECRET`, `RPC_SECRET`, `DATABASE_URL` (or Hyperdrive `DB`) for auth-worker; `AUTH_WORKER` services entry in api-worker's `wrangler.jsonc`; `wrangler secret put` for production.

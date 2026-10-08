@@ -1,0 +1,102 @@
+{
+  "name": "auth-worker",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/auth-worker/src",
+  "projectType": "application",
+  "tags": [
+    "scope:auth",
+    "type:cloudflare-worker",
+    "runtime:workerd"
+  ],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/auth-worker"],
+      "options": {
+        "command": "wrangler deploy --dry-run --outdir ../../dist/apps/auth-worker",
+        "cwd": "apps/auth-worker"
+      },
+      "configurations": {
+        "development": {
+          "command": "wrangler deploy --dry-run --outdir ../../dist/apps/auth-worker --env development",
+          "cwd": "apps/auth-worker"
+        },
+        "production": {
+          "command": "wrangler deploy --dry-run --outdir ../../dist/apps/auth-worker --env production",
+          "cwd": "apps/auth-worker"
+        }
+      },
+      "cache": true
+    },
+
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p apps/auth-worker/tsconfig.app.json --noEmit"
+      },
+      "cache": true
+    },
+
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "apps/auth-worker"
+      },
+      "configurations": {
+        "watch": {
+          "command": "vitest",
+          "cwd": "apps/auth-worker"
+        },
+        "coverage": {
+          "command": "vitest run --coverage",
+          "cwd": "apps/auth-worker"
+        }
+      },
+      "cache": true
+    },
+
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wrangler dev --port 8788",
+        "cwd": "apps/auth-worker"
+      },
+      "configurations": {
+        "development": {
+          "command": "wrangler dev --port 8788 --env development",
+          "cwd": "apps/auth-worker"
+        }
+      },
+      "cache": false
+    },
+
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wrangler deploy",
+        "cwd": "apps/auth-worker"
+      },
+      "configurations": {
+        "production": {
+          "command": "wrangler deploy --env production",
+          "cwd": "apps/auth-worker"
+        },
+        "staging": {
+          "command": "wrangler deploy --env staging",
+          "cwd": "apps/auth-worker"
+        }
+      },
+      "cache": false
+    },
+
+    "tail": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wrangler tail klenzo-auth-worker",
+        "cwd": "apps/auth-worker"
+      },
+      "cache": false
+    }
+  }
+}

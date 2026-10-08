@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 
 /**
@@ -10,6 +11,17 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
  * @see https://developers.cloudflare.com/workers/testing/vitest-integration/
  */
 export default defineWorkersConfig({
+  resolve: {
+    // @klenzo/* libs are consumed through tsconfig paths (tsc) and esbuild
+    // (wrangler). Vite needs explicit aliases to resolve them the same way.
+    alias: [
+      {
+        find: /^@klenzo\/(.+)$/,
+        replacement: path.resolve(__dirname, '../../libs/$1/src/index.ts'),
+      },
+    ],
+  },
+
   test: {
     // Run .spec.ts files in the Workers pool.
     include: ['src/**/*.spec.ts'],
