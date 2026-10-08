@@ -116,6 +116,20 @@ Two migration defects were found and fixed while bringing Phase 3 up:
 
 ---
 
+### 4.7 pg pool vs Workers isolate freeze — ✅ FIXED (2026-10-08)
+
+Tier 1 testing (`wrangler dev` against local PG) surfaced a production-class bug: **strict every-other-request hangs** (`500` with *"The Workers runtime canceled this request because it detected that your Worker's code had hung"*). Root cause: Workers isolates freeze between requests while module-level `pg.Pool` keeps its TCP socket objects; the peer drops the idle connection, the pool hands out a dead socket, and the query written to it hangs silently until the runtime kills the request. Reproduced deterministically: 201 → 500 → 201 → 500 on identical requests; zero PG sessions observed after responses (sockets reaped at idle).
+
+**Fix:** `maxUses: 1` on the pg pool in `libs/database/src/client.ts` — every connection is discarded after a single checkout, so a connection can never survive an isolate freeze and be reused dead. Cost is a fresh TCP handshake per checkout (negligible locally; worth revisiting as a per-request pool lifecycle once Hyperdrive is live — see [kenfdev's write-up](https://blog.kenev.net/en/posts/pg-pool-hangs-cloudflare-workers/) and the Cloudflare community `maxUses: 1` report).
+
+Also in this change: auth-worker's `wrangler.jsonc` now declares a `DB` hyperdrive binding with `localConnectionString` (local-dev origin; Miniflare requires a password field — trust auth accepts the `localdev` placeholder). **For a real deploy:** replace `id: "local-dev"` with a created Hyperdrive config (`wrangler hyperdrive create …`) or drop the block and use a `DATABASE_URL` secret. `.dev.vars` is now gitignored.
+
+Tier 1 result after the fix: **43/43 assertions pass** (register/409/400, login/lockout, cookies, refresh rotation + replay, logout, Bearer+cookie auth, RPC secret enforcement, bcrypt hash persisted, lockout persisted in DB).
+
+
+
+---
+
 ## 5. Next actions (in contract order)
 
 1. Exit-gate verification for Phase 0/1: deployed `api-worker` smoke test against a live environment (requires wrangler credentials — `wrangler login`, $0 plan).

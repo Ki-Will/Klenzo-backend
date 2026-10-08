@@ -27,12 +27,22 @@
 
   // ---------------------------------------------------------------------------
   // Hyperdrive — the auth worker's only dependency is PostgreSQL.
-  // Add once Hyperdrive is provisioned ($0 tier):
-  // "hyperdrive": [
-  //   { "binding": "DB", "id": "<HYPERDRIVE_CONFIG_ID>" }
-  // ],
   //
-  // Until then set a DATABASE_URL secret:
+  // Local dev: Miniflare simulates Hyperdrive with a direct TCP proxy to the
+  // origin (bypassing workerd's raw sockets, which proved unreliable for pg
+  // connection lifecycle — see docs/migration/status.md §4.7).
+  // Deployed: replace with a real id from `wrangler hyperdrive create` and
+  // keep the origin out of git (locals may stay for dev).
+  // ---------------------------------------------------------------------------
+  "hyperdrive": [
+    {
+      "binding": "DB",
+      "id": "local-dev",
+      "localConnectionString": "postgresql://klenzo:localdev@localhost:5434/klenzo_db"
+    }
+  ],
+
+  // Until Hyperdrive is provisioned in the cloud, set a DATABASE_URL secret:
   //   wrangler secret put DATABASE_URL
   // ---------------------------------------------------------------------------
 

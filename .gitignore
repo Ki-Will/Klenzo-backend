@@ -4,7 +4,7 @@
 /out-tsc
 
 # dependencies
-/node_modules
+node_modules/
 
 # IDEs and editors
 /.idea
@@ -53,3 +53,6 @@ Thumbs.db
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+
+# Wrangler local dev secrets
+.dev.vars

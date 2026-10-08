@@ -18,7 +18,19 @@ export type { PrismaClient } from '@prisma/client';
  * module which is unavailable in the Workers runtime.
  */
 export function createPrismaClient(connectionString: string): PrismaClient {
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaPg({
+    connectionString,
+    // CRITICAL (Cloudflare Workers): isolates freeze between requests, but
+    // module-level pools keep their TCP socket objects in memory.  The peer
+    // drops the idle connection and the pool then hands out a dead socket —
+    // queries written to it hang silently until the runtime kills the
+    // request with "your Worker's code had hung" (observed as a strict
+    // every-other-request failure in local wrangler dev; same class of bug
+    // is reported in production — see docs/migration/status.md §4.7).
+    // maxUses: 1 discards every connection after a single checkout, so a
+    // connection can never survive an isolate freeze and be reused dead.
+    maxUses: 1,
+  });
   return new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
 }
 
