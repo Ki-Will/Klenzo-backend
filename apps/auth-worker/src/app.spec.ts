@@ -797,3 +797,263 @@ describe('legacy contract compatibility', () => {
     expect(body.service).toBe('auth-worker');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Forgot / reset password (legacy parity)
+// ---------------------------------------------------------------------------
+
+describe('forgot/reset password', () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = makeHarness();
+    await register(h);
+  });
+
+  it('forgot-password returns the same message for unknown emails (no enumeration)', async () => {
+    const { res, body } = await json(h.app, '/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'nobody@example.com' }),
+    });
+    expect(res.status).toBe(200);
+    expect(body.message).toBe('If that email exists, a reset link has been sent');
+    expect(body.devResetToken).toBeUndefined();
+  });
+
+  it('forgot-password stores a SHA-256 hash (never the raw token) + 1 h expiry', async () => {
+    const { res, body } = await json(h.app, '/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'alice@example.com' }),
+    });
+    expect(res.status).toBe(200);
+    expect(body.message).toBe('If that email exists, a reset link has been sent');
+
+    const row = [...h.store.rows.values()][0];
+    if (!body.devResetToken) throw new Error('expected devResetToken in non-production');
+    expect(row.passwordResetToken).toBeTypeOf('string');
+    expect(row.passwordResetToken).not.toBe(body.devResetToken);
+    expect(row.passwordResetToken).toMatch(/^[0-9a-f]{64}$/); // sha256 hex
+    expect(row.passwordResetExpires).toBeInstanceOf(Date);
+    expect(row.passwordResetExpires!.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('forgot-password rejects an invalid email with 400', async () => {
+    const { res } = await json(h.app, '/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'not-an-email' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('reset-password resets the password, clears the token, and unlocks the account', async () => {
+    const forgot = await json(h.app, '/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'alice@example.com' }),
+    });
+
+    // Simulate a locked account with failed attempts (the recovery path).
+    const row = [...h.store.rows.values()][0];
+    await h.store.update(row.id, { isActive: false, failedLoginAttempts: 5 });
+
+    const { res, body } = await json(h.app, '/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: forgot.body.devResetToken, password: 'newpassword123' }),
+    });
+    expect(res.status).toBe(200);
+    expect(body.message).toBe('Password reset successful');
+
+    const updated = [...h.store.rows.values()][0];
+    expect(updated.passwordResetToken).toBeNull();
+    expect(updated.passwordResetExpires).toBeNull();
+    expect(updated.isActive).toBe(true); // unlocked
+    expect(updated.failedLoginAttempts).toBe(0);
+    // Old password fails, new one works.
+    const oldLogin = await login(h, 'alice@example.com', 'password123');
+    expect(oldLogin.res.status).toBe(401);
+    const newLogin = await login(h, 'alice@example.com', 'newpassword123');
+    expect(newLogin.res.status).toBe(200);
+    expect(newLogin.body.success).toBe(true);
+  });
+
+  it('reset-password rejects an unknown token with 401', async () => {
+    const { res, body } = await json(h.app, '/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: 'bogus-token', password: 'newpassword123' }),
+    });
+    expect(res.status).toBe(401);
+    expect(body.message).toBe('Invalid or expired reset token');
+  });
+
+  it('reset-password rejects an expired token with 401', async () => {
+    const forgot = await json(h.app, '/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'alice@example.com' }),
+    });
+    const row = [...h.store.rows.values()][0];
+    await h.store.update(row.id, {
+      passwordResetExpires: new Date(Date.now() - 1000),
+    });
+    const { res } = await json(h.app, '/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: forgot.body.devResetToken, password: 'newpassword123' }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('reset-password rejects a short password with 400', async () => {
+    const forgot = await json(h.app, '/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'alice@example.com' }),
+    });
+    const { res } = await json(h.app, '/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token: forgot.body.devResetToken, password: 'short' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MFA management (legacy parity)
+// ---------------------------------------------------------------------------
+
+describe('mfa management', () => {
+  let h: Harness;
+  let token: string;
+  let rowId: string;
+
+  beforeEach(async () => {
+    h = makeHarness();
+    const created = await register(h);
+    token = created.body.accessToken as string;
+    rowId = [...h.store.rows.values()][0].id;
+  });
+
+  const authed = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+  it('status reports mfaEnabled: false and requires auth', async () => {
+    const anon = await json(h.app, '/auth/mfa/status');
+    expect(anon.res.status).toBe(401);
+
+    const { res, body } = await json(h.app, '/auth/mfa/status', {
+      headers: authed(token),
+    });
+    expect(res.status).toBe(200);
+    expect(body.mfaEnabled).toBe(false);
+  });
+
+  it('setup persists a secret, returns otpauthUrl, but does NOT enable MFA', async () => {
+    const { res, body } = await json(h.app, '/auth/mfa/setup', {
+      method: 'POST',
+      headers: authed(token),
+    });
+    expect(res.status).toBe(200);
+    expect(typeof body.secret).toBe('string');
+    expect(body.otpauthUrl).toContain('otpauth://totp/');
+    expect(body.otpauthUrl).toContain(`secret=${body.secret}`);
+
+    const row = [...h.store.rows.values()][0];
+    expect(row.mfaSecret).toBe(body.secret);
+    expect(row.mfaEnabled).toBe(false); // must verify via enable first
+  });
+
+  it('setup conflicts (409) when MFA is already enabled', async () => {
+    await h.store.update(rowId, { mfaEnabled: true, mfaSecret: generateTotpSecret() });
+    const { res, body } = await json(h.app, '/auth/mfa/setup', {
+      method: 'POST',
+      headers: authed(token),
+    });
+    expect(res.status).toBe(409);
+    expect(body.message).toBe('Two-factor authentication is already enabled');
+  });
+
+  it('enable requires setup first (400), rejects wrong code (401), then enables', async () => {
+    const noSetup = await json(h.app, '/auth/mfa/enable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code: '123456' }),
+    });
+    expect(noSetup.res.status).toBe(400);
+
+    const setup = await json(h.app, '/auth/mfa/setup', {
+      method: 'POST',
+      headers: authed(token),
+    });
+    const secret = setup.body.secret as string;
+
+    const wrong = await json(h.app, '/auth/mfa/enable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code: '000000' }),
+    });
+    expect(wrong.res.status).toBe(401);
+    expect(wrong.body.message).toBe('Invalid authentication code');
+
+    const code = await totpAt(secret);
+    const ok = await json(h.app, '/auth/mfa/enable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code }),
+    });
+    expect(ok.res.status).toBe(200);
+    expect(ok.body.mfaEnabled).toBe(true);
+    expect([...h.store.rows.values()][0].mfaEnabled).toBe(true);
+
+    // And now login demands the second factor.
+    const loginRes = await login(h, 'alice@example.com', 'password123');
+    expect(loginRes.body.mfaRequired).toBe(true);
+  });
+
+  it('enable conflicts (409) when already enabled', async () => {
+    const secret = generateTotpSecret();
+    await h.store.update(rowId, { mfaEnabled: true, mfaSecret: secret });
+    const code = await totpAt(secret);
+    const { res } = await json(h.app, '/auth/mfa/enable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('disable requires a valid code, then clears the secret and flag', async () => {
+    // Not enabled yet → 409.
+    const notEnabled = await json(h.app, '/auth/mfa/disable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code: '123456' }),
+    });
+    expect(notEnabled.res.status).toBe(409);
+
+    const secret = generateTotpSecret();
+    await h.store.update(rowId, { mfaEnabled: true, mfaSecret: secret });
+
+    const wrong = await json(h.app, '/auth/mfa/disable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code: '000000' }),
+    });
+    expect(wrong.res.status).toBe(401);
+
+    const code = await totpAt(secret);
+    const ok = await json(h.app, '/auth/mfa/disable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code }),
+    });
+    expect(ok.res.status).toBe(200);
+    expect(ok.body.mfaEnabled).toBe(false);
+    const row = [...h.store.rows.values()][0];
+    expect(row.mfaEnabled).toBe(false);
+    expect(row.mfaSecret).toBeNull();
+  });
+
+  it('mfa/enable rejects a malformed code with 400', async () => {
+    await json(h.app, '/auth/mfa/setup', { method: 'POST', headers: authed(token) });
+    const { res } = await json(h.app, '/auth/mfa/enable', {
+      method: 'POST',
+      headers: authed(token),
+      body: JSON.stringify({ code: 'ab12cd' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});

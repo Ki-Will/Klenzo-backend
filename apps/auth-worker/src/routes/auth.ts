@@ -13,6 +13,12 @@
  *   POST /auth/logout     200 {success: true} + cleared cookies   (authenticated)
  *   GET  /auth/profile    200 safeUser                            (authenticated)
  *   POST /auth/profile    200 safeUser                            (authenticated)
+ *   POST /auth/forgot-password  200 {message}   (always the same message)
+ *   POST /auth/reset-password   200 {message}
+ *   GET  /auth/mfa/status   200 {mfaEnabled}                      (authenticated)
+ *   POST /auth/mfa/setup    200 {secret, otpauthUrl}              (authenticated)
+ *   POST /auth/mfa/enable   200 {mfaEnabled: true}                (authenticated)
+ *   POST /auth/mfa/disable  200 {mfaEnabled: false}               (authenticated)
  *
  * Errors use the legacy AllExceptionsFilter body:
  *   {statusCode, timestamp, path, message}
@@ -20,9 +26,13 @@
 
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import {
+  DisableMfaSchema,
+  EnableMfaSchema,
+  ForgotPasswordSchema,
   LoginSchema,
   MfaLoginSchema,
   RegisterLegacySchema,
+  ResetPasswordSchema,
   UpdateProfileLegacySchema,
 } from '@klenzo/validation';
 
@@ -46,7 +56,7 @@ import {
   ACCESS_TOKEN_TTL_S,
   REFRESH_TOKEN_TTL_DAYS,
 } from '../lib/session';
-import { verifyTotp } from '../lib/totp';
+import { generateTotpSecret, otpauthUrl, verifyTotp } from '../lib/totp';
 import { toSafeUser, type UserRecord } from '../lib/store';
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -306,6 +316,133 @@ export function authRoutes(deps: Deps): Hono<AppEnv> {
 
     const updated = await deps.store.update(current.id, fields);
     return c.json(toSafeUser(updated));
+  });
+
+  // ── FORGOT / RESET PASSWORD ─────────────────────────────────────────────
+
+  // FORGOT PASSWORD — always the same 200 body (anti-enumeration, legacy
+  // parity). The raw token is normally delivered by email; the Worker has no
+  // email provider yet (later phase), so in non-production it is echoed in
+  // `devResetToken` to keep the flow end-to-end testable.
+  app.post('/forgot-password', async (c) => {
+    const parsed = ForgotPasswordSchema.safeParse(await readJson(c));
+    if (!parsed.success) throw new HttpError(400, zodMessages(parsed.error));
+
+    const user = await deps.store.findByEmail(parsed.data.email);
+    if (!user) {
+      return c.json({ message: 'If that email exists, a reset link has been sent' });
+    }
+
+    const rawBytes = crypto.getRandomValues(new Uint8Array(32));
+    const resetToken = Array.from(rawBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const hashedToken = await sha256Hex(resetToken);
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour (legacy)
+
+    await deps.store.update(user.id, {
+      passwordResetToken: hashedToken,
+      passwordResetExpires: expires,
+    });
+
+    // TODO(phase: email): sendPasswordResetEmail(user.email, resetToken)
+    // once the email provider lands. Legacy fires-and-forgets the email.
+
+    if (!deps.secureCookies) {
+      return c.json({
+        message: 'If that email exists, a reset link has been sent',
+        devResetToken: resetToken,
+      });
+    }
+
+    return c.json({ message: 'If that email exists, a reset link has been sent' });
+  });
+
+  // RESET PASSWORD — consumes the hashed token, re-hashes the new password,
+  // and UNLOCKS the account (isActive=true, failedLoginAttempts=0) — the
+  // locked-account recovery path promised by the login error message.
+  app.post('/reset-password', async (c) => {
+    const parsed = ResetPasswordSchema.safeParse(await readJson(c));
+    if (!parsed.success) throw new HttpError(400, zodMessages(parsed.error));
+
+    const hashedToken = await sha256Hex(parsed.data.token);
+    const user = await deps.store.findByResetHash(hashedToken);
+    if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      throw new HttpError(401, 'Invalid or expired reset token');
+    }
+
+    await deps.store.update(user.id, {
+      passwordHash: await hashPassword(parsed.data.password),
+      passwordResetToken: null,
+      passwordResetExpires: null,
+      failedLoginAttempts: 0,
+      isActive: true,
+    });
+
+    return c.json({ message: 'Password reset successful' });
+  });
+
+  // ── MFA MANAGEMENT ───────────────────────────────────────────────────────
+
+  // MFA STATUS — read the current flag.
+  app.get('/mfa/status', requireAuth(deps), (c) => {
+    return c.json({ mfaEnabled: c.get('authUser').mfaEnabled });
+  });
+
+  // MFA SETUP — generate + persist a TOTP secret WITHOUT enabling MFA yet;
+  // the user must prove possession via /mfa/enable. 409 when already enabled.
+  app.post('/mfa/setup', requireAuth(deps), async (c) => {
+    const user = c.get('authUser');
+    if (user.mfaEnabled) {
+      throw new HttpError(409, 'Two-factor authentication is already enabled');
+    }
+
+    const secret = generateTotpSecret();
+    await deps.store.update(user.id, { mfaSecret: secret });
+
+    return c.json({
+      secret,
+      // Label mirrors legacy speakeasy: name=`Klenzo (${email})`,
+      // issuer=`Klenzo` → otpauth://totp/Klenzo:Klenzo (email)?...
+      otpauthUrl: otpauthUrl(secret, `Klenzo (${user.email})`),
+    });
+  });
+
+  // MFA ENABLE — verify the first code, then flip mfaEnabled=true.
+  app.post('/mfa/enable', requireAuth(deps), async (c) => {
+    const parsed = EnableMfaSchema.safeParse(await readJson(c));
+    if (!parsed.success) throw new HttpError(400, zodMessages(parsed.error));
+
+    const user = c.get('authUser');
+    if (user.mfaEnabled) throw new HttpError(409, 'MFA is already enabled');
+    if (!user.mfaSecret) {
+      throw new HttpError(
+        400,
+        'MFA setup has not been started. Call POST /auth/mfa/setup first.',
+      );
+    }
+
+    const valid = await verifyTotp(user.mfaSecret, parsed.data.code);
+    if (!valid) throw new HttpError(401, 'Invalid authentication code');
+
+    await deps.store.update(user.id, { mfaEnabled: true });
+    return c.json({ mfaEnabled: true });
+  });
+
+  // MFA DISABLE — requires a valid current code; clears the secret too.
+  app.post('/mfa/disable', requireAuth(deps), async (c) => {
+    const parsed = DisableMfaSchema.safeParse(await readJson(c));
+    if (!parsed.success) throw new HttpError(400, zodMessages(parsed.error));
+
+    const user = c.get('authUser');
+    if (!user.mfaEnabled) throw new HttpError(409, 'MFA is not currently enabled');
+    if (!user.mfaSecret) {
+      throw new HttpError(400, 'MFA secret is missing — contact support');
+    }
+
+    const valid = await verifyTotp(user.mfaSecret, parsed.data.code);
+    if (!valid) throw new HttpError(401, 'Invalid authentication code');
+
+    await deps.store.update(user.id, { mfaEnabled: false, mfaSecret: null });
+    return c.json({ mfaEnabled: false });
   });
 
   return app;

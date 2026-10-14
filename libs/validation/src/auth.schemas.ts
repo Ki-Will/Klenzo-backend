@@ -135,6 +135,50 @@ export const UpdateProfileLegacySchema = z.object({
 
 export type UpdateProfileLegacyInput = z.infer<typeof UpdateProfileLegacySchema>;
 
+// ─── Forgot password (legacy parity) ───────────────────────────────────────
+//
+// Exact shape of the legacy ForgotPasswordDto: `{ email }`. The response is
+// always the same message regardless of whether the email exists (anti
+// enumeration).
+
+export const ForgotPasswordSchema = z.object({
+  email: z.string().trim().email('Invalid email address').toLowerCase(),
+});
+
+export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
+
+// ─── Reset password (legacy parity) ────────────────────────────────────────
+//
+// Exact shape of the legacy ResetPasswordDto: `{ token, password ≥ 8 }` —
+// the legacy DTO has NO complexity rules, so parity demands min-length only.
+
+export const ResetPasswordSchema = z.object({
+  token: z.string().min(1, 'token is required'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be at most 128 characters'),
+});
+
+export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;
+
+// ─── MFA enable / disable (legacy parity) ──────────────────────────────────
+//
+// Exact shape of the legacy EnableMfaDto / DisableMfaDto: `{ code }` where
+// code must be 6 digits.
+
+export const EnableMfaSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Authentication code must be 6 digits'),
+});
+
+export type EnableMfaInput = z.infer<typeof EnableMfaSchema>;
+
+export const DisableMfaSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Authentication code must be 6 digits'),
+});
+
+export type DisableMfaInput = z.infer<typeof DisableMfaSchema>;
+
 // ─── Internal RPC bodies (service-to-service, Phase 5) ───────────────────
 //
 // Explicit TypeScript contracts for Worker-to-Worker RPC over service

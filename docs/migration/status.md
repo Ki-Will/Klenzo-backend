@@ -135,7 +135,7 @@ Tier 1 result after the fix: **43/43 assertions pass** (register/409/400, login/
 1. Exit-gate verification for Phase 0/1: deployed `api-worker` smoke test against a live environment (requires wrangler credentials — `wrangler login`, $0 plan).
 2. ✅ Phase 2 done (2026-10-07): `auth-service` consumes `@klenzo/contracts` with proto-parity types; Worker/shared libs have zero NestJS imports.
 3. ✅ Phase 3 done locally (2026-10-08): all migrations deploy against local PG 17.5; vertical slice test green. Remaining: Hyperdrive binding in a deployed environment + run the slice through a real binding.
-4. ✅ Phase 4 done (2026-10-08): `auth-worker` implements the legacy auth contract (register/login/MFA/refresh/logout/profile) with 63 tests. Remaining for the exit gate: deploy both workers, point the frontend's `BACKEND_URL` (Next `/backend` rewrite) at api-worker, and verify login/register/refresh end-to-end in the browser.
+4. ✅ Phase 4 done (2026-10-08): `auth-worker` implements the legacy auth contract (register/login/MFA-login/refresh/logout/profile **plus forgot-password, reset-password, and MFA status/setup/enable/disable** — 77 tests). The frontend's `/backend` rewrite is now split (`AUTH_BACKEND_URL` opt-in in `klenzoo-frontend/apps/web/next.config.ts`: `/backend/auth/*` → api-worker, everything else → legacy). Remaining for the exit gate: deploy both workers, set `AUTH_BACKEND_URL`, and verify login/register/refresh end-to-end in the browser.
 5. ✅ Phase 5 done (2026-10-08): auth traffic crosses the `AUTH_WORKER` service binding; typed RPC client with zod-validated contracts replaces the gRPC call pattern for new code.
 6. Next: Phase 6 (Finance Worker) — read/write through `libs/database` with transaction + trigger parity tests.
 

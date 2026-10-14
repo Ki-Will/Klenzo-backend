@@ -44,6 +44,8 @@ export interface UserStore {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
   findByRefreshHash(hash: string): Promise<UserRecord | null>;
+  /** Lookup by password-reset token hash (reset-password flow). */
+  findByResetHash(hash: string): Promise<UserRecord | null>;
   create(data: CreateUserInput): Promise<UserRecord>;
   update(id: string, data: UserUpdateData): Promise<UserRecord>;
 }
@@ -56,6 +58,8 @@ export function prismaUserStore(client: PrismaClient): UserStore {
     findById: (id) => client.user.findUnique({ where: { id } }),
     findByRefreshHash: (hash) =>
       client.user.findFirst({ where: { refreshToken: hash } }),
+    findByResetHash: (hash) =>
+      client.user.findFirst({ where: { passwordResetToken: hash } }),
     create: (data) => client.user.create({ data }),
     update: (id, data) =>
       client.user.update({
@@ -76,6 +80,7 @@ export function lazyUserStore(resolve: () => UserStore): UserStore {
     findByEmail: (email) => resolve().findByEmail(email),
     findById: (id) => resolve().findById(id),
     findByRefreshHash: (hash) => resolve().findByRefreshHash(hash),
+    findByResetHash: (hash) => resolve().findByResetHash(hash),
     create: (data) => resolve().create(data),
     update: (id, data) => resolve().update(id, data),
   };
@@ -104,6 +109,12 @@ export function memoryUserStore(): MemoryUserStore {
     async findByRefreshHash(hash) {
       for (const user of rows.values()) {
         if (user.refreshToken === hash) return user;
+      }
+      return null;
+    },
+    async findByResetHash(hash) {
+      for (const user of rows.values()) {
+        if (user.passwordResetToken === hash) return user;
       }
       return null;
     },
