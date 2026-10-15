@@ -56,3 +56,6 @@ temp_interactive_push.bat
 
 # Wrangler local dev secrets
 .dev.vars
+
+# Tier 2 deploy secrets (hosted DB URL, generated worker secrets)
+.tier2.env

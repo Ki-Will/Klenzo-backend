@@ -26,13 +26,12 @@
   // ---------------------------------------------------------------------------
   // Uncomment once the auth-worker is deployed.
   //
-  // "services": [
-  //   {
-  //     "binding": "AUTH_WORKER",
-  //     "service": "klenzo-auth-worker",
-  //     "environment": "production"
-  //   }
-  // ],
+  "services": [
+    {
+      "binding": "AUTH_WORKER",
+      "service": "klenzo-auth-worker"
+    }
+  ],
 
   // ---------------------------------------------------------------------------
   // KV Namespaces (add when needed)

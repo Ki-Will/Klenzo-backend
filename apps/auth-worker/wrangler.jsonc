@@ -31,20 +31,16 @@
   // Local dev: Miniflare simulates Hyperdrive with a direct TCP proxy to the
   // origin (bypassing workerd's raw sockets, which proved unreliable for pg
   // connection lifecycle — see docs/migration/status.md §4.7).
-  // Deployed: replace with a real id from `wrangler hyperdrive create` and
-  // keep the origin out of git (locals may stay for dev).
+  // Deployed: the `id` below is the real config from `wrangler hyperdrive
+  // create klenzo-auth-db` (origin kept in Cloudflare's store, not in git).
   // ---------------------------------------------------------------------------
   "hyperdrive": [
     {
       "binding": "DB",
-      "id": "local-dev",
+      "id": "a27a347d1cb74afa948a04adc8960509",
       "localConnectionString": "postgresql://klenzo:localdev@localhost:5434/klenzo_db"
     }
   ],
-
-  // Until Hyperdrive is provisioned in the cloud, set a DATABASE_URL secret:
-  //   wrangler secret put DATABASE_URL
-  // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
   // Observability

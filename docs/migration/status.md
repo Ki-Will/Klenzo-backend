@@ -130,6 +130,22 @@ Tier 1 result after the fix: **43/43 assertions pass** (register/409/400, login/
 
 ---
 
+### 4.8 Hosted Tier 2 deployment — ✅ DONE (2026-10-15) + Hyperdrive caching trap
+
+Neon (free tier, eu-central-1) + Cloudflare Workers, all via Hyperdrive:
+
+- `prisma migrate deploy` applied all **10 migrations** (30 tables, 7 schemas) against Neon. Two prerequisites the local PG had bootstrapped manually are now a forward migration (`20260917_pre_hosted_prereqs`): `CREATE SCHEMA IF NOT EXISTS "platform"` (used by `feature_flags`/`rbac`) and `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"` — idempotent, so already-provisioned DBs no-op.
+- Hyperdrive config `klenzo-auth-db` (`a27a347d…`) bound as `DB`; `JWT_SECRET` + `RPC_SECRET` set via `wrangler secret put`; both workers deployed; api-worker's `AUTH_WORKER` services binding enabled.
+- `scripts/tier2-contract-test.sh` (34 checks) passes **34/34 against the live deployment**.
+
+**Production bug found & fixed — Hyperdrive result caching breaks read-your-writes.** Symptom: register → `201`, immediate duplicate register → `500` (Prisma `P2002` unique violation despite the pre-check lookup), login → `401` for a user confirmed present in the DB. Diagnosis (via temporary worker instrumentation + `wrangler tail`): `prisma.user.findUnique({where: {email}})` returned `null` while a raw `SELECT count(*)` with the identical predicate on the same client returned `1`; `INSERT`s and writes worked; `findById` lookups that first ran *after* the write also worked. Root cause: **`wrangler hyperdrive create` ships with SQL-response caching ENABLED** (`"caching": {"disabled": false}`). The edge cache keyed on query text+params served the *pre-write* empty result for every repeated `findUnique(email)` — while writes bypassed the cache and hit the primary. Aggregates (`count(*)`) are not cached, which is why the raw count looked "correct" and made this so confusing. Fix: `wrangler hyperdrive update <id> --caching-disabled`. **Rule: any Hyperdrive-backed workload with mutable data must disable caching.**
+
+Also fixed in the battery: the RPC checks target `/rpc/*`, which the auth-worker serves directly (`/rpc/*`, header `X-Klenzo-Rpc-Secret`) — the old `/api/auth/rpc/*` path never existed; the api-worker intentionally 404s `/rpc/*` (service-binding only), so `RUN_RPC=1` runs must keep `RPC_BASE` unset.
+
+Local `localConnectionString` in `wrangler.jsonc` remains for `wrangler dev`; the Hyperdrive `id` is committed (the origin/connection string lives only in Cloudflare's store). `.tier2.env` (Neon URL + generated secrets) is gitignored.
+
+---
+
 ## 5. Next actions (in contract order)
 
 1. Exit-gate verification for Phase 0/1: deployed `api-worker` smoke test against a live environment (requires wrangler credentials — `wrangler login`, $0 plan).
@@ -139,4 +155,4 @@ Tier 1 result after the fix: **43/43 assertions pass** (register/409/400, login/
 5. ✅ Phase 5 done (2026-10-08): auth traffic crosses the `AUTH_WORKER` service binding; typed RPC client with zod-validated contracts replaces the gRPC call pattern for new code.
 6. Next: Phase 6 (Finance Worker) — read/write through `libs/database` with transaction + trigger parity tests.
 
-Outstanding secrets/bindings (deployment step, not code): `JWT_SECRET`, `RPC_SECRET`, `DATABASE_URL` (or Hyperdrive `DB`) for auth-worker; `AUTH_WORKER` services entry in api-worker's `wrangler.jsonc`; `wrangler secret put` for production.
+Outstanding secrets/bindings: ✅ DONE (2026-10-15) — `JWT_SECRET` + `RPC_SECRET` set, Hyperdrive `DB` bound (caching disabled — see §4.8), api-worker `AUTH_WORKER` services entry enabled, both workers deployed, Tier 2 battery 34/34 live. Remaining for the exit gate: set `AUTH_BACKEND_URL` in the frontend and verify login/register/refresh end-to-end in the browser.

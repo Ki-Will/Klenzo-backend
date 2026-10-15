@@ -11,12 +11,17 @@
 # Usage:
 #   BASE=http://localhost:8788 bash scripts/tier2-contract-test.sh          # local
 #   BASE=https://klenzo-auth-worker.<account>.workers.dev \
-#   RPC_BASE=https://klenzo-api-worker.<account>.workers.dev \
 #     bash scripts/tier2-contract-test.sh                                   # cloud
 #
+#   Note: RUN_RPC=1 checks hit $RPC_BASE (defaults to $BASE). The /rpc/* routes
+#   are exposed publicly ONLY on the auth-worker (the api-worker intentionally
+#   404s them — service-to-service via binding), so keep RPC_BASE unset for the
+#   cloud run.
+#
 # Optional env:
-#   RUN_RPC=1        also run the /rpc/* secret-enforcement checks (needs RPC_BASE
-#                    pointing at api-worker for the service-binding path).
+#   RUN_RPC=1        also run the /rpc/* secret-enforcement checks against the
+#                    auth-worker's public URL (401 without/with wrong secret
+#                    proves the routes fail closed even when exposed).
 #   TOTP_SECRET=...  skip the MFA-setup dance and use a known secret.
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
@@ -223,11 +228,11 @@ check "mfa/status back to false" \
 
 # ── 8. RPC secret enforcement (service-binding path) ────────────────────────
 if [ "$RUN_RPC" = "1" ]; then
-  R=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RPC_BASE/api/auth/rpc/validate-token" \
+  R=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RPC_BASE/rpc/validate-token" \
     -H 'Content-Type: application/json' -d "{\"token\":\"$AT\"}")
   check "rpc without secret returns 401" $([ "$R" = 401 ]; echo $?)
-  R=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RPC_BASE/api/auth/rpc/validate-token" \
-    -H 'Content-Type: application/json' -H 'X-Rpc-Secret: wrong-secret' \
+  R=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RPC_BASE/rpc/validate-token" \
+    -H 'Content-Type: application/json' -H 'X-Klenzo-Rpc-Secret: wrong-secret' \
     -d "{\"token\":\"$AT\"}")
   check "rpc with wrong secret returns 401" $([ "$R" = 401 ]; echo $?)
 fi
