@@ -6,6 +6,7 @@ import { NotificationModule } from '../notification/notification.module';
 import { RbacModule } from './rbac/rbac.module';
 import { ConsentModule } from './consent/consent.module';
 import { ApprovalModule } from './approval/approval.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ApprovalModule } from './approval/approval.module';
     RbacModule,
     ConsentModule,
     ApprovalModule,
+    SupportModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],
