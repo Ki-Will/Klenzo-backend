@@ -194,7 +194,9 @@ export class ApprovalService {
   async getPendingRequests(type?: string, status?: string) {
     const where: Record<string, unknown> = {};
     if (type) where.type = type;
-    if (status) {
+    if (status && status.toUpperCase() === 'ALL') {
+      // No status filter — the admin console shows every request.
+    } else if (status) {
       where.status = status.toUpperCase();
     } else {
       where.status = 'PENDING';
