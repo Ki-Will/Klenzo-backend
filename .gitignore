@@ -16,7 +16,6 @@ node_modules/
 *.sublime-workspace
 
 # IDE - VSCode
-.vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
@@ -45,8 +44,6 @@ Thumbs.db
 /apps/*/dist/
 
 # Environment
-.env
-.env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -62,3 +59,4 @@ temp_interactive_push.bat
 
 # Wrangler local build/deploy state (contains local dev artifacts)
 .wrangler/
+config.bat

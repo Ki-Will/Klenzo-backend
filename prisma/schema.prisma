@@ -238,6 +238,7 @@ model User {
   consentRecords    ConsentRecord[]
   approvalRequests  ApprovalRequest[] @relation("ApprovalRequestedBy")
   approvalActions   ApprovalRequest[] @relation("ApprovalApprovedBy")
+  supportCases      SupportCase[]
 
   @@map("users")
   @@schema("auth")
@@ -400,6 +401,62 @@ model FeatureFlag {
 
   @@map("feature_flags")
   @@schema("platform")
+}
+
+// ── SUPPORT SCHEMA (PLATFORM) ───────────────────────────────────────────────
+
+enum SupportCaseStatus {
+  OPEN
+  IN_PROGRESS
+  ESCALATED
+  RESOLVED
+  CLOSED
+
+  @@schema("platform")
+}
+
+enum SupportCasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@schema("platform")
+}
+
+model SupportCase {
+  id          String              @id @default(uuid())
+  userId      String
+  subject     String
+  description String
+  status      SupportCaseStatus   @default(OPEN)
+  priority    SupportCasePriority @default(MEDIUM)
+  assignedTo  String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportCaseMessage[]
+
+  @@map("support_cases")
+  @@schema("platform")
+  @@index([status])
+  @@index([userId])
+}
+
+model SupportCaseMessage {
+  id         String   @id @default(uuid())
+  caseId     String
+  authorId   String?
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  case SupportCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("support_case_messages")
+  @@schema("platform")
+  @@index([caseId])
 }
 
 // ── PRODUCTIVITY SCHEMA ─────────────────────────────────────────────────────
